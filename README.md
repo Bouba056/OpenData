@@ -28,16 +28,6 @@ Lancer le projet
 pip install -r requirements.txt
 streamlit run app/dashboard.py
 
-Structure simplifiée
-cc-logement-dashboard/
-│
-├── data/              # Données brutes et géographiques
-├── notebooks/         # Étapes de prétraitement et analyses
-├── app/               # Application Streamlit
-├── models/            # Modèles ML sauvegardés (k-means, Isolation Forest)
-├── outputs/           # Résultats et exports
-└── README.md
-
 Résultat attendu
 
 Une carte interactive affichant les clusters de communes selon leur profil logement,
