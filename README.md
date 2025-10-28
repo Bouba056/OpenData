@@ -26,9 +26,8 @@ Interface : Streamlit
 
 Lancer le projet
 pip install -r requirements.txt
-streamlit run app/dashboard.py
 
 Résultat attendu
 
 Une carte interactive affichant les clusters de communes selon leur profil logement,
-ainsi que les communes atypiques détectées par les algorithmes, avec des graphiques comparatifs et un résumé automatique du profil choisi.
+ainsi que les communes atypiques détectées par les algorithmes, avec des graphiques comparatifs.
