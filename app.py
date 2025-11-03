@@ -21,10 +21,14 @@ st.sidebar.success("✅ Données chargées")
 
 # Chemins des fichiers
 gdf_path = "DATA/communes_30_34_with_cc_2022.geojson"
+data_carto_path = "SORTIE/data_clean_2022.csv"
 df_path = "SORTIE/Compil_clean.csv"
 
 # Chargement direct
 gdf = gpd.read_file(gdf_path)
+
+gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)
+data_carto = pd.read_csv(data_carto_path)
 df_hist = pd.read_csv(df_path)
 
 # ------------------------------------------------
@@ -48,6 +52,7 @@ with tab1:
     - Une **cartographie interactive** des communes du Gard et de l’Hérault ;
     - Une **analyse temporelle** des indicateurs logement par commune.
     """)
+    
 
 
 # ------------------------------------------------
@@ -56,53 +61,90 @@ with tab1:
 with tab2:
     st.header("🗺️ Cartographie interactive")
 
-    # Liste automatique des colonnes numériques
-    numeric_columns = [col for col in gdf.columns if gdf[col].dtype in ["float64", "int64"]]
+    # -----------------------------
+    # 🧭 Layout : deux colonnes
+    # -----------------------------
+    col_left, col_right = st.columns([1, 3])
 
-    # Choix de la variable à afficher
-    variable = st.selectbox(
-        "Choisis une variable à afficher :",
-        numeric_columns,
-        index=numeric_columns.index("LOG") if "LOG" in numeric_columns else 0
-    )
+    with col_left:
+        st.subheader("🧩 Variables disponibles")
+        st.markdown("Sélectionnez une variable à afficher sur la carte :")
+        variable = st.radio(
+            "",
+            ["LOG", "RP", "RSECOCC", "LOGVAC"],
+            index=0,
+            horizontal=False
+        )
+        st.markdown(
+            f"📊 **Variable sélectionnée :** `{variable}`",
+            help="Choisissez un indicateur à cartographier."
+        )
 
-    # Création de la carte Folium
-    m = folium.Map(location=[43.8, 4.2], zoom_start=8, tiles="cartodbpositron")
+    with col_right:
+        # -----------------------------
+        # 🗺️ Préparation des données
+        # -----------------------------
+        gdf[variable] = pd.to_numeric(gdf[variable], errors="coerce")
 
-    # Fonction de style basée sur la variable choisie
-    def style_function(feat):
-        value = feat["properties"].get(variable, 0)
-        # dégradé simple de bleu selon la valeur
-        if value is None:
-            color = "#cccccc"
-        elif value < gdf[variable].quantile(0.33):
-            color = "#a6cee3"
-        elif value < gdf[variable].quantile(0.66):
-            color = "#1f78b4"
-        else:
-            color = "#08306b"
-        return {
-            "fillColor": color,
-            "color": "black",
-            "weight": 0.5,
-            "fillOpacity": 0.7,
-        }
+        # Calcul du centre géographique pour centrer la carte
+        center = gdf.geometry.unary_union.centroid
+        lat, lon = center.y, center.x
 
-    # Ajout du GeoJSON avec info-bulle
-    folium.Choropleth(
-    geo_data=gdf,
-    data=gdf,
-    columns=["insee_com", "Unemployment"],
-    nan_fill_color="purple",
-    nan_fill_opacity=0.4,
-    key_on="feature.insee_com",
-    fill_color="YlGn",
-    ).add_to(m)
+        # -----------------------------
+        # 🎨 Carte Folium stylisée
+        # -----------------------------
+        m = folium.Map(
+            location=[lat, lon],
+            zoom_start=9,
+            tiles="cartodbpositron",
+            min_zoom=8,
+            max_zoom=10,
+            max_bounds=True
+        )
 
-    # Affichage de la carte
-    st_folium(m, width=1200, height=700)
+        # Couche choroplèthe colorée
+        folium.Choropleth(
+            geo_data=gdf.__geo_interface__,
+            data=gdf,
+            columns=["insee_com", variable],
+            key_on="feature.properties.insee_com",
+            fill_color="YlOrRd",  # 🔥 palette plus vive
+            fill_opacity=0.85,
+            line_opacity=0.4,
+            legend_name=f"{variable} (valeurs relatives)"
+        ).add_to(m)
 
+        # Contours + infobulle personnalisée
+        folium.GeoJson(
+            gdf,
+            name="Communes",
+            style_function=lambda x: {
+                "fillColor": "transparent",
+                "color": "black",
+                "weight": 0.5,
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=["LIBGEO", variable],
+                aliases=["🏙️ Commune :", f"📈 {variable} :"],
+                localize=True,
+                sticky=True,
+                labels=True,
+                style=(
+                    "background-color: white; color: #333; "
+                    "font-family: Arial; font-size: 13px; padding: 6px; "
+                    "border-radius: 5px;"
+                ),
+            ),
+        ).add_to(m)
 
+        # Titre visuel
+        st.markdown(
+            f"<h4 style='text-align:center;'>Carte de la variable <span style='color:#ff5733'>{variable}</span></h4>",
+            unsafe_allow_html=True,
+        )
+
+        # Affichage de la carte
+        st_folium(m, width=900, height=600)
 
 # ------------------------------------------------
 # 📊 ONGLET 3 : ANALYSE

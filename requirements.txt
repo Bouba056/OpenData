@@ -18,7 +18,7 @@ plotly==5.24.1
 folium==0.18.0
 matplotlib==3.9.2
 seaborn==0.13.2
-
+streamlit_folium
 
 
 # Web application
@@ -26,3 +26,4 @@ streamlit==1.50.0
 
 # Additional utilities
 requests==2.32.3
+pyarrow==11.0.0 
