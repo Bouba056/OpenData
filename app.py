@@ -1,7 +1,7 @@
 # ================================================================
 # (logo ?? a voir) Application Open Data Logement (Gard & Hérault)
 # ================================================================
-
+# lanceur : py -m streamlit run app.py 
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
@@ -79,10 +79,11 @@ with tab2:
         
         st.markdown("Sélectionnez une variable à afficher sur la carte :")
         variable = st.radio(
-            "",
+            "Variable à afficher",
             ["LOG", "RP", "RSECOCC", "LOGVAC"],
             index=0,
-            horizontal=False
+            horizontal=False,
+            label_visibility="collapsed"
         )
         st.markdown(
             f"📊 **Variable sélectionnée :** `{variable}`",
@@ -176,7 +177,7 @@ with tab3:
         y="NOMBRE",
         barmode="stack",
         color="TYPE_HABITAT",   # empilement par type
-        title=f"Évolution du parc de logements à {commune}",
+        title=f"Évolution des logements du parc selon le type de l'habitat<br><sup>Commune : {commune}",
         color_discrete_sequence=["#4C72B0", "#C44E52"],  # couleurs perso
         labels={
             "AN": "Année",
@@ -205,6 +206,8 @@ with tab3:
         # --- Personnalisation générale ---
         fig.update_layout(
             template="plotly_white",
+            barcornerradius=15,
+            
             legend_title_text="Type d'habitat"
         )
 
@@ -213,25 +216,82 @@ with tab3:
 
 
     with col2:
-        datacate2 = datacate[datacate["LIBGEO"] == commune]
-        fig2 = px.bar(
-        datacate2,
-        x="AN",          
-        y="NOMBRE",
-        color="TYPE_LOG",   
-        title=f"Évolution du parc de logements à {commune} selon la catégorie",
-        color_discrete_sequence=["#4C72B0", "#C44E52", "#85B31A"],  # couleurs perso
-        labels={
-            "AN": "Année",
-            "NOMBRE": "Nombre de logements",
-            "TYPE_LOG": "Catégorie de l'habitat"
-            }
+        dataso2 = dataso[dataso["LIBGEO"] == commune]
+        dataso2=dataso2[(dataso2["AN"]==2022)]
+        
+        fig2 = px.pie(
+            dataso2,
+            values="NOMBRE", 
+            names="STATUT",
+            title=f"Répartition des résidences principales selon la catégorie<br><sup>Commune : {commune}",
+            color_discrete_sequence=px.colors.sequential.RdBu
          )   
+        
+
+
         # --- Personnalisation générale ---
         fig2.update_layout(
             template="plotly_white",
+            barcornerradius=15,
             legend_title_text="Type d'habitat"
         )
 
         # --- Affichage Streamlit ---
         st.plotly_chart(fig2, use_container_width=True)
+
+
+
+
+
+    col3, col4 = st.columns(2)
+    with col3:
+        datacate2 = datacate[datacate["LIBGEO"] == commune]
+        
+        fig3 = px.area(
+            datacate2,
+            x="AN",
+            y="NOMBRE",
+            color="TYPE_LOG",
+            title=f"Évolution de la répartition des logements selon leur catégorie<br><sup>Commune : {commune}",
+            color_discrete_sequence=["#4C72B0", "#C44E52", "#85B31A"],
+            labels={
+                "AN": "Année",
+                "NOMBRE": "Nombre de logements",
+                "TYPE_LOG": "Catégorie de l'habitat"
+            }
+        )
+
+        fig3.update_layout(
+            template="plotly_white",
+            legend_title_text="Catégorie de logement",
+            hovermode="x unified"  # joli survol groupé
+        )
+
+        st.plotly_chart(fig3, use_container_width=True)
+
+
+
+
+    with col4:
+        dataty2 = dataty[dataty["LIBGEO"] == commune]
+        dataty2 =dataty2 [(dataty2 ["AN"]==2022)]
+        
+        fig4 = px.bar(
+            dataty2,
+            x="NOMBRE", 
+            y="TYPO",
+            orientation = "h",
+            title=f"Répartition des résidences principales selon leur typologie<br><sup>Commune : {commune}"
+         )   
+        
+
+
+        # --- Personnalisation générale ---
+        fig4.update_layout(
+            
+            template="plotly_white",
+            barcornerradius=15
+        )
+
+        # --- Affichage Streamlit ---
+        st.plotly_chart(fig4, use_container_width=True)
