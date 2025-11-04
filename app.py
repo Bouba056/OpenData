@@ -1,5 +1,5 @@
 # ================================================================
-# 🏠 Application Open Data Logement (Gard & Hérault)
+# (logo ?? a voir) Application Open Data Logement (Gard & Hérault)
 # ================================================================
 
 import streamlit as st
@@ -8,6 +8,8 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ------------------------------------------------
 # ⚙️ CONFIGURATION
@@ -22,19 +24,26 @@ st.sidebar.success("✅ Données chargées")
 # Chemins des fichiers
 gdf_path = "DATA/communes_30_34_with_cc_2022.geojson"
 data_carto_path = "SORTIE/data_clean_2022.csv"
-df_path = "SORTIE/Compil_clean.csv"
+#df_path = "SORTIE/Compil_clean.csv"
 
 # Chargement direct
 gdf = gpd.read_file(gdf_path)
 
-gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)
+gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)  # iMPORTANT SINON LA CARTE NE MARCHE PAS 
 data_carto = pd.read_csv(data_carto_path)
-df_hist = pd.read_csv(df_path)
+#df_hist = pd.read_csv(df_path)
+
+
+datahab = pd.read_csv("SORTIE/TAB_TYPEHAB.csv")
+datacate = pd.read_csv("SORTIE/TAB_CATEHAB.csv")
+
+dataso = pd.read_csv("SORTIE/RP_SO.csv")
+dataty = pd.read_csv("SORTIE/RP_TYPO.csv")
 
 # ------------------------------------------------
 # 🧭 ONGLET PRINCIPAL
 # ------------------------------------------------
-st.title("🏠 Application Open Data Logement")
+st.title("(logo ? a voir) Application Open Data Logement")
 st.markdown("Explorez les données de logement pour le **Gard (30)** et **l’Hérault (34)** de 2013 à 2022.")
 
 # Création des onglets
@@ -44,7 +53,7 @@ tab1, tab2, tab3 = st.tabs(["🏡 Accueil", "🗺️ Cartographie", "📊 Analys
 # 🏡 ONGLET 1 : ACCUEIL
 # ------------------------------------------------
 with tab1:
-    st.header("Bienvenue 👋")
+    st.header("Bienvenue !...")
     st.write("""
     Cette application permet d'explorer les données de **logement** issues de l'Open Data.
     
@@ -67,7 +76,7 @@ with tab2:
     col_left, col_right = st.columns([1, 3])
 
     with col_left:
-        st.subheader("🧩 Variables disponibles")
+        
         st.markdown("Sélectionnez une variable à afficher sur la carte :")
         variable = st.radio(
             "",
@@ -87,7 +96,7 @@ with tab2:
         gdf[variable] = pd.to_numeric(gdf[variable], errors="coerce")
 
         # Calcul du centre géographique pour centrer la carte
-        center = gdf.geometry.unary_union.centroid
+        center = gdf.geometry.union_all().centroid
         lat, lon = center.y, center.x
 
         # -----------------------------
@@ -152,33 +161,77 @@ with tab2:
 with tab3:
     st.header("📊 Analyse par commune")
 
-    commune = st.selectbox("Sélectionnez une commune :", sorted(df_hist["LIBGEO"].unique()))
-    data_commune = df_hist[df_hist["LIBGEO"] == commune]
+    commune = st.selectbox("Sélectionnez une commune :", sorted(datahab["LIBGEO"].unique()))
+    
 
     st.subheader(f"Évolution historique de la commune : {commune}")
 
     col1, col2 = st.columns(2)
     with col1:
-        fig, ax = plt.subplots()
-        ax.bar(data_commune["AN"], data_commune["LOG"], color="#4C72B0")
-        ax.set_title("Nombre total de logements")
-        st.pyplot(fig)
+        datahab2 = datahab[datahab["LIBGEO"] == commune]
+        
+        fig = px.bar(
+        datahab2,
+        x="AN",          # ton année
+        y="NOMBRE",
+        barmode="stack",
+        color="TYPE_HABITAT",   # empilement par type
+        title=f"Évolution du parc de logements à {commune}",
+        color_discrete_sequence=["#4C72B0", "#C44E52"],  # couleurs perso
+        labels={
+            "AN": "Année",
+            "NOMBRE": "Nombre de logements",
+            "TYPE_HABITAT": "Type d'habitat"
+            }
+         )   
+
+        # --- Ajouter la ligne du total ---
+        # On calcule le total LOG pour chaque année
+        totaux = datahab2.groupby("AN", as_index=False)["LOG"].first()  # ou sum() si répétitions
+
+        fig.add_trace(
+            go.Scatter(
+                x=totaux["AN"],
+                y=totaux["LOG"],
+                mode="lines+markers+text",
+                text=[f"{int(v):,}".replace(",", " ") for v in totaux["LOG"]],
+                textposition="top center",
+                name="Total logements",
+                line=dict(color="black", width=2),
+                marker=dict(size=6)
+            )
+        )
+
+        # --- Personnalisation générale ---
+        fig.update_layout(
+            template="plotly_white",
+            legend_title_text="Type d'habitat"
+        )
+
+        # --- Affichage Streamlit ---
+        st.plotly_chart(fig, use_container_width=True)
+
 
     with col2:
-        fig, ax = plt.subplots()
-        ax.bar(data_commune["AN"], data_commune["RP"], color="#55A868")
-        ax.set_title("Résidences principales")
-        st.pyplot(fig)
+        datacate2 = datacate[datacate["LIBGEO"] == commune]
+        fig2 = px.bar(
+        datacate2,
+        x="AN",          
+        y="NOMBRE",
+        color="TYPE_LOG",   
+        title=f"Évolution du parc de logements à {commune} selon la catégorie",
+        color_discrete_sequence=["#4C72B0", "#C44E52", "#85B31A"],  # couleurs perso
+        labels={
+            "AN": "Année",
+            "NOMBRE": "Nombre de logements",
+            "TYPE_LOG": "Catégorie de l'habitat"
+            }
+         )   
+        # --- Personnalisation générale ---
+        fig2.update_layout(
+            template="plotly_white",
+            legend_title_text="Type d'habitat"
+        )
 
-    col3, col4 = st.columns(2)
-    with col3:
-        fig, ax = plt.subplots()
-        ax.bar(data_commune["AN"], data_commune["LOGVAC"], color="#C44E52")
-        ax.set_title("Logements vacants")
-        st.pyplot(fig)
-
-    with col4:
-        fig, ax = plt.subplots()
-        ax.bar(data_commune["AN"], data_commune["RSECOCC"], color="#8172B3")
-        ax.set_title("Résidences secondaires")
-        st.pyplot(fig)
+        # --- Affichage Streamlit ---
+        st.plotly_chart(fig2, use_container_width=True)
