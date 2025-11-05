@@ -80,6 +80,7 @@ with tab2:
         st.markdown("Sélectionnez une variable à afficher sur la carte :")
         variable = st.radio(
             "Variable à afficher",
+            # ["Plog_RP", "Plog_RS", "Plog_VAC", "Plog_RP_LOCHLM", "Plog_RP_LOCPRIV","Prp_RP_LOCHLM", "Prp_RP_LOCPRIV"], # contenus dans data_carto
             ["LOG", "RP", "RSECOCC", "LOGVAC"],
             index=0,
             horizontal=False,
