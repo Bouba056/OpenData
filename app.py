@@ -127,12 +127,12 @@ st.markdown("<p class='subtitle'>Gard (30) et Hérault (34) — Données 2013 à
 tab1, tab2, tab3 = st.tabs(["🛖Accueil", "🌍 Cartographie", "📈 Analyse"])
 
 # ------------------------------------------------
-# 🏡 ONGLET 1 : ACCUEIL
+# ONGLET 1 : ACCUEIL
 # ------------------------------------------------
 with tab1:
-    # 🌟 Titre principal
+    # Titre principal
     st.markdown(
-        "<h2 style='text-align:center; color:#2E4053;'>🏡 Bienvenue sur l’Observatoire du logement</h2>",
+        "<h2 style='text-align:center; color:#2E4053;'>Projet open data et web des données</h2>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -145,7 +145,7 @@ with tab1:
 
     st.markdown("---")
 
-    # 🧭 Présentation générale
+    #  Présentation générale
     st.markdown("### 🎯 Objectif de l’application")
     st.write(
         """
@@ -177,7 +177,7 @@ with tab1:
     st.markdown("---")
 
     # 📊 Aperçu des données
-    st.markdown("### 📊 Exemple de données utilisées")
+    st.markdown("### ⎍ Exemple de données utilisées")
 
     # Affichage d’un petit échantillon
     st.dataframe(
@@ -531,7 +531,7 @@ with tab3:
             y="TYPO",
             orientation="h",
             text_auto=True,
-            title="<b>Répartition des RP en 2022 selon leur typologie</b>",
+            title="<b>Répartition des résidences principales en 2022 selon leur typologie</b>",
             color_discrete_sequence=["#2E86C1"]
         )
         fig4.update_layout(
