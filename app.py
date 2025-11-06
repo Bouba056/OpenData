@@ -29,7 +29,7 @@ data_carto_path = "SORTIE/data_clean_2022.csv"
 # Chargement direct
 gdf = gpd.read_file(gdf_path)
 
-gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)  # iMPORTANT SINON LA CARTE NE MARCHE PAS 
+#gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)  # iMPORTANT SINON LA CARTE NE MARCHE PAS 
 data_carto = pd.read_csv(data_carto_path)
 #df_hist = pd.read_csv(df_path)
 
@@ -80,8 +80,8 @@ with tab2:
         st.markdown("Sélectionnez une variable à afficher sur la carte :")
         variable = st.radio(
             "Variable à afficher",
-            # ["Plog_RP", "Plog_RS", "Plog_VAC", "Plog_RP_LOCHLM", "Plog_RP_LOCPRIV","Prp_RP_LOCHLM", "Prp_RP_LOCPRIV"], # contenus dans data_carto
-            ["LOG", "RP", "RSECOCC", "LOGVAC"],
+            ["Plog_RP", "Plog_RS", "Plog_VAC", "Plog_RP_LOCHLM", "Plog_RP_LOCPRIV","Prp_RP_LOCHLM", "Prp_RP_LOCPRIV"], # contenus dans data_carto
+            #["LOG", "RP", "RSECOCC", "LOGVAC"],
             index=0,
             horizontal=False,
             label_visibility="collapsed"
@@ -95,7 +95,7 @@ with tab2:
         # -----------------------------
         # 🗺️ Préparation des données
         # -----------------------------
-        gdf[variable] = pd.to_numeric(gdf[variable], errors="coerce")
+        #gdf[variable] = pd.to_numeric(gdf[variable], errors="coerce")
 
         # Calcul du centre géographique pour centrer la carte
         center = gdf.geometry.union_all().centroid
