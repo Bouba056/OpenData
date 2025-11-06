@@ -31,3 +31,18 @@ Résultat attendu
 
 Une carte interactive affichant les clusters de communes selon leur profil logement,
 ainsi que les communes atypiques détectées par les algorithmes, avec des graphiques comparatifs.
+
+
+
+# Pour lancer le traitement.ipynb :
+On a utilisé git lfs pour compresser et deposer le fichier commune_500.csv car trop volumineux 
+
+Utilisation de Git LFS pour le lancement de Traitement.ipynb :
+
+brew install git-lfs (installer git lfs)
+
+git lfs install  (initaliser git lfs)
+
+git lfs pull (Obtenir les fichiers compressés par lfs)
+
+
