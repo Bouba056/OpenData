@@ -221,8 +221,25 @@ with tab2:
     # -----------------------------
     # 🧭 Layout : deux colonnes
     # -----------------------------
-    col_left, col_right = st.columns([1, 3])
+    col_left, col_right = st.columns([1, 3], gap="small")
+    st.markdown("""
+    <style>
+    /* Force la colonne gauche à prendre toute la hauteur disponible */
+    div[data-testid="column"]:first-child {
+        height: 100%;
+        min-height: 680px; /* hauteur minimale pour aligner avec la carte */
+        background-color: #f9fafb;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 12px 15px;
+                
+    }
+    div[data-testid="column"]:nth-child(2) {
+    height: 100%;
+    }
 
+        </style>
+    """, unsafe_allow_html=True)
     with col_left:
         
         # --- Initialisation de session pour un seul choix global ---
@@ -305,16 +322,6 @@ with tab2:
         elif st.session_state.selected_group == "loc" and choice_loc:
             variable = {v: k for k, v in labels_rpty.items()}[choice_loc]
 
-        # --- Message ou affichage ---
-       # if variable is None:
-      #      st.warning("➡️ Sélectionnez une variable dans l’un des trois blocs pour afficher la carte.")
-       # else:
-       #     st.markdown(
-       #         f"📊 **Variable sélectionnée :** `{variable}`",
-       #         help="Choisissez un indicateur à cartographier."
-      #      )
-
-
 
     with col_right:
         # -----------------------------
@@ -347,7 +354,7 @@ with tab2:
             fill_color="YlOrRd",  # 🔥 palette plus vive
             fill_opacity=0.85,
             line_opacity=0.4,
-            legend_name=f"{variable} (valeurs relatives)"
+            legend_name=f"{variable} (%)"
         ).add_to(m)
 
         # Contours + infobulle personnalisée
@@ -367,7 +374,7 @@ with tab2:
                 labels=True,
                 style=(
                     "background-color: white; color: #333; "
-                    "font-family: Arial; font-size: 13px; padding: 6px; "
+                    "font-family: Arial; font-size: 13px; padding: 6px;border-radius: 5px;border: 1px solid black "
                     "border-radius: 5px;"
                 ),
             ),
@@ -380,7 +387,7 @@ with tab2:
         #)
 
         # Affichage de la carte
-        st_folium(m, width=1000, height=660)
+        st_folium(m, width=None, height=660)
 
 # ------------------------------------------------
 # 📊 ONGLET 3 : ANALYSE
