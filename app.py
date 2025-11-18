@@ -138,45 +138,7 @@ with tab1:
 
     st.markdown("---")
 
-    # Indicateurs clés (KPI) en haut de page
-    col1, col2, col3, col4 = st.columns(4)
     
-    with col1:
-        st.markdown("""
-        <div class='info-card' style='text-align:center;'>
-            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
-            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Communes</p>
-        </div>
-        """.format(len(data_carto)).replace(",", " "), unsafe_allow_html=True)
-    
-    with col2:
-        total_log = data_carto['LOG'].sum()
-        st.markdown("""
-        <div class='info-card' style='text-align:center;'>
-            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
-            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Logements totaux</p>
-        </div>
-        """.format(int(total_log)).replace(",", " "), unsafe_allow_html=True)
-    
-    with col3:
-        total_rp = data_carto['RP'].sum()
-        st.markdown("""
-        <div class='info-card' style='text-align:center;'>
-            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
-            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Résidences principales</p>
-        </div>
-        """.format(int(total_rp)).replace(",", " "), unsafe_allow_html=True)
-    
-    with col4:
-        total_vac = data_carto['LOGVAC'].sum()
-        st.markdown("""
-        <div class='info-card' style='text-align:center;'>
-            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
-            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Logements vacants</p>
-        </div>
-        """.format(int(total_vac)).replace(",", " "), unsafe_allow_html=True)
-
-    st.markdown("---")
 
     #  Présentation générale
     st.markdown("<div class='info-card'><h3 style='color: #d17842; margin-top: 0;'>Objectif de l’application</h3>"
@@ -244,7 +206,78 @@ with tab1:
 # ------------------------------------------------
 #  ONGLET 2 : CARTOGRAPHIE
 # ------------------------------------------------
+
 with tab2:
+    # --- Préparation des données par département ---
+    # On suppose que le code département est '30' pour Gard et '34' pour Hérault
+    # Si ta colonne DEP est numérique (30, 34), garde tel quel. Si c'est du texte ("30", "34"), ajoute des guillemets.
+    df_gard = data_carto[data_carto['DEP'] == "30"]
+    df_herault = data_carto[data_carto['DEP'] == "34"]
+
+    # --- Fonction pour générer la carte HTML double ---
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    # Fonction utilitaire pour créer une carte KPI
+    def kpi_card(title, col_name):
+        total_34 = data_carto.loc[data_carto["DEP"] == 34, col_name].sum()
+        total_30 = data_carto.loc[data_carto["DEP"] == 30, col_name].sum()
+
+        html = f"""
+        <div style='text-align:center; background-color:#f9e8d8; border-radius:12px; 
+                    padding:10px 5px; box-shadow:0px 2px 4px rgba(0,0,0,0.1);'>
+            <h4 style='color:#8b5e3c; margin-bottom:8px;'>{title}</h4>
+            <div style='display:flex; justify-content:space-around;'>
+                <div style='flex:1;'>
+                    <h3 style='color:#d17842; margin:0;'>{int(total_34):,}</h3>
+                    <p style='color:#8b5e3c; font-size:13px; margin:0;'>Hérault (34)</p>
+                </div>
+                <div style='flex:1;'>
+                    <h3 style='color:#d17842; margin:0;'>{int(total_30):,}</h3>
+                    <p style='color:#8b5e3c; font-size:13px; margin:0;'>Gard (30)</p>
+                </div>
+            </div>
+        </div>
+        """
+        st.markdown(html.replace(",", " "), unsafe_allow_html=True)
+
+    # ------------------------------------------------
+    # 🏘️ Lignes d'indicateurs
+    # ------------------------------------------------
+    with col1:
+        total_com_34 = data_carto[data_carto["DEP"] == 34]["insee_com"].nunique()
+        total_com_30 = data_carto[data_carto["DEP"] == 30]["insee_com"].nunique()
+        html = f"""
+        <div style='text-align:center; background-color:#f9e8d8; border-radius:12px; 
+                    padding:10px 5px; box-shadow:0px 2px 4px rgba(0,0,0,0.1);'>
+            <h4 style='color:#8b5e3c; margin-bottom:8px;'>Nombre de communes</h4>
+            <div style='display:flex; justify-content:space-around;'>
+                <div style='flex:1;'>
+                    <h3 style='color:#d17842; margin:0;'>{total_com_34}</h3>
+                    <p style='color:#8b5e3c; font-size:13px; margin:0;'>Hérault (34)</p>
+                </div>
+                <div style='flex:1;'>
+                    <h3 style='color:#d17842; margin:0;'>{total_com_30}</h3>
+                    <p style='color:#8b5e3c; font-size:13px; margin:0;'>Gard (30)</p>
+                </div>
+            </div>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+
+    with col2:
+        kpi_card("Logements totaux", "LOG")
+
+    with col3:
+        kpi_card("Résidences principales", "RP")
+
+    with col4:
+        kpi_card("Résidences secondaires", "RSECOCC")    
+
+    with col5:
+        kpi_card("Logements vacants", "LOGVAC")
+
+    st.markdown("---")
+
     st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Cartographie interactive</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#8b5e3c; margin-bottom: 20px;'>Explorez les indicateurs de logement par commune</p>", unsafe_allow_html=True)
 
