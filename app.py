@@ -1,7 +1,7 @@
 # ================================================================
-# (logo ?? a voir) Application Open Data Logement (Gard & Hérault)
+# Application Open Data Logement (Gard & Hérault)
 # ================================================================
-# lanceur : py -m streamlit run app.py 
+# lanceur : streamlit run app.py
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
@@ -10,6 +10,16 @@ from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
+
+# Optimisation : Cache pour accélérer le chargement
+@st.cache_data
+def load_geojson(path):
+    gdf = gpd.read_file(path)
+    return gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)
+
+@st.cache_data
+def load_csv(path):
+    return pd.read_csv(path)
 
 # ------------------------------------------------
 # ⚙️ CONFIGURATION
@@ -23,56 +33,62 @@ st.markdown(
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     * { font-family: 'Inter', sans-serif; }
-    .main { background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%); }
+    .main { background: linear-gradient(135deg, #f5eee0 0%, #ecdaa2 100%); }
 
     .header-container {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e8a87c 0%, #d17842 100%);
     padding: 40px 20px;
     border-radius: 15px;
-    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 8px 32px rgba(209, 120, 66, 0.3);
     margin-bottom: 30px;
+    transition: all 0.3s ease;
+    }
+    .header-container:hover {
+    background: linear-gradient(135deg, #f0b68c 0%, #e08850 100%);
+    box-shadow: 0 10px 40px rgba(209, 120, 66, 0.4);
     }
     
     .main-title { text-align: center; color: #fff; font-size: 42px; font-weight: 700; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
-    .subtitle { text-align: center; color: #f0f0f0; font-size: 18px; margin-bottom: 10px; }
+    .subtitle { text-align: center; color: #f9f3e8; font-size: 18px; margin-bottom: 10px; }
     
-    h2, h3, h4 { color: #2E4053; font-weight: 600; }
+    h2, h3, h4 { color: #8b5e3c; font-weight: 600; }
     .info-card {
-    background: white;
+    background: linear-gradient(135deg, #faf6ef 0%, #f5eee0 100%);
     padding: 25px;
     border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 15px rgba(139, 94, 60, 0.15);
     margin: 15px 0;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #d17842;
     transition: all 0.3s ease;
     }
-    .info-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12); transform: translateY(-2px); }
+    .info-card:hover { box-shadow: 0 6px 20px rgba(139, 94, 60, 0.25); transform: translateY(-2px); background: linear-gradient(135deg, #fff 0%, #f9f3e8 100%); }
     
     div[data-baseweb="tab-list"] {
     justify-content: center;
     gap: 15px !important;
-    background: white;
+    background: linear-gradient(135deg, #faf6ef 0%, #ecdaa2 100%);
     padding: 15px 20px;
     border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 15px rgba(139, 94, 60, 0.15);
     margin-bottom: 20px;
     }
     button[data-baseweb="tab"] {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    color: #495057; border-radius: 10px; padding: 12px 35px; font-size: 16px; font-weight: 600; border: none;
-    transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    background: linear-gradient(135deg, #f5eee0 0%, #ecdaa2 100%);
+    color: #8b5e3c; border-radius: 10px; padding: 12px 35px; font-size: 16px; font-weight: 600; border: 2px solid transparent;
+    transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(139, 94, 60, 0.1);
     }
-    button[data-baseweb="tab"]:hover { background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%); transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    button[data-baseweb="tab"]:hover { background: linear-gradient(135deg, #ecdaa2 0%, #e0c896 100%); transform: translateY(-3px); box-shadow: 0 4px 12px rgba(139, 94, 60, 0.2); border: 2px solid #d17842; }
     button[data-baseweb="tab"][aria-selected="true"] {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); transform: translateY(-3px);
+    background: linear-gradient(135deg, #e8a87c 0%, #d17842 100%); color: white; box-shadow: 0 6px 20px rgba(209, 120, 66, 0.4); transform: translateY(-3px); border: 2px solid #c06838;
   }
-  hr { border: none; height: 2px; background: linear-gradient(90deg, transparent, #ddd, transparent); margin: 25px 0; }
+  hr { border: none; height: 2px; background: linear-gradient(90deg, transparent, #d17842, transparent); margin: 25px 0; }
   
   .sidebar-title {
-  color: #2E4053; font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #667eea;
+  color: #8b5e3c; font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #d17842;
   }
   
-  .dataframe { border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .dataframe { border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(139, 94, 60, 0.1); }
+  .stSelectbox > div > div { background: linear-gradient(135deg, #faf6ef 0%, #ecdaa2 100%); border: 2px solid #d17842; border-radius: 8px; }
   </style>
   """,
     unsafe_allow_html=True
@@ -81,37 +97,18 @@ st.markdown(
 
 
 # ------------------------------------------------
-#  IMPORT SIMPLE DES DONNÉES
+# IMPORT OPTIMISÉ DES DONNÉES avec cache
 # ------------------------------------------------
+gdf = load_geojson("DATA/communes_30_34_with_cc_2022.geojson")
+data_carto = load_csv("SORTIE/data_clean_2022.csv")
+datahab = load_csv("SORTIE/TAB_TYPEHAB.csv")
+datacate = load_csv("SORTIE/TAB_CATEHAB.csv")
+dataso = load_csv("SORTIE/RP_SO.csv")
+dataty = load_csv("SORTIE/RP_TYPO.csv")
 
-# Chemins des fichiers
-gdf_path = "DATA/communes_30_34_with_cc_2022.geojson"
-data_carto_path = "SORTIE/data_clean_2022.csv"
-#df_path = "SORTIE/Compil_clean.csv"
-
-# Chargement direct
-gdf = gpd.read_file(gdf_path)
-
-gdf = gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)  # iMPORTANT SINON LA CARTE NE MARCHE PAS 
-data_carto = pd.read_csv(data_carto_path)
-#df_hist = pd.read_csv(df_path)
-
-
-datahab = pd.read_csv("SORTIE/TAB_TYPEHAB.csv")
-datacate = pd.read_csv("SORTIE/TAB_CATEHAB.csv")
-
-dataso = pd.read_csv("SORTIE/RP_SO.csv")
-dataty = pd.read_csv("SORTIE/RP_TYPO.csv")
-
-# ------------------------------------------------
-# ONGLET PRINCIPAL
-# ------------------------------------------------
 # ------------------------------------------------
 # EN-TÊTE DE L'APPLICATION
 # ------------------------------------------------
-
-# st.markdown("<h1 class='main-title'>Tableau de bord du parc de logement</h1>", unsafe_allow_html=True)
-# st.markdown("<p class='subtitle'>Gard (30) et Hérault (34) — Données 2013 à 2022</p>", unsafe_allow_html=True)
 st.markdown("""
     <div class='header-container'>
         <h1 class='main-title'>Tableau de bord du parc de logement</h1>
@@ -128,23 +125,63 @@ tab1, tab2, tab3 = st.tabs(["🛖Accueil", "🌍 Cartographie", "📈 Analyse"])
 with tab1:
     # Titre principal
     st.markdown(
-        "<h2 style='text-align:center; color:#2E4053;'>Projet open data et web des données</h2>",
+        "<h2 style='text-align:center; color:#8b5e3c;'>Projet open data et web des données</h2>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p style='text-align:center; color:#7F8C8D; font-size:17px;'>"
-        "Une application interactive pour explorer l’évolution du parc de logements "
-        "dans les départements du <b>Gard (30)</b> et de <b>l’Hérault (34)</b>."
+        "<p style='text-align:center; color:#8b5e3c; font-size:17px;'>"
+        "Une application interactive pour explorer l'évolution du parc de logements "
+        "dans les départements du <b>Gard (30)</b> et de <b>l'Hérault (34)</b>."
         "</p>",
         unsafe_allow_html=True,
     )
 
     st.markdown("---")
 
+    # Indicateurs clés (KPI) en haut de page
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("""
+        <div class='info-card' style='text-align:center;'>
+            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
+            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Communes</p>
+        </div>
+        """.format(len(data_carto)).replace(",", " "), unsafe_allow_html=True)
+    
+    with col2:
+        total_log = data_carto['LOG'].sum()
+        st.markdown("""
+        <div class='info-card' style='text-align:center;'>
+            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
+            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Logements totaux</p>
+        </div>
+        """.format(int(total_log)).replace(",", " "), unsafe_allow_html=True)
+    
+    with col3:
+        total_rp = data_carto['RP'].sum()
+        st.markdown("""
+        <div class='info-card' style='text-align:center;'>
+            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
+            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Résidences principales</p>
+        </div>
+        """.format(int(total_rp)).replace(",", " "), unsafe_allow_html=True)
+    
+    with col4:
+        total_vac = data_carto['LOGVAC'].sum()
+        st.markdown("""
+        <div class='info-card' style='text-align:center;'>
+            <h3 style='color: #d17842; margin: 0;'>{:,}</h3>
+            <p style='color: #8b5e3c; margin: 5px 0 0 0;'>Logements vacants</p>
+        </div>
+        """.format(int(total_vac)).replace(",", " "), unsafe_allow_html=True)
+
+    st.markdown("---")
+
     #  Présentation générale
-    st.markdown("<div class='info-card'><h3 style='color: #667eea; margin-top: 0;'>Objectif de l’application</h3>"
-                "<p style='line-height: 1.8; color: #495057;'>Cette application a pour but de faciliter la <strong>visualisation</strong>, la <strong>comparaison</strong> et l’<strong>analyse temporelle</strong> des indicateurs liés au logements dans les communes du Gard et de l’Hérault. Elle met à disposition :"
-                "</p><ul style='line-height: 1.8; color: #495057;'>"
+    st.markdown("<div class='info-card'><h3 style='color: #d17842; margin-top: 0;'>Objectif de l’application</h3>"
+                "<p style='line-height: 1.8; color: #8b5e3c;'>Cette application a pour but de faciliter la <strong>visualisation</strong>, la <strong>comparaison</strong> et l’<strong>analyse temporelle</strong> des indicateurs liés au logements dans les communes du Gard et de l’Hérault. Elle met à disposition :"
+                "</p><ul style='line-height: 1.8; color: #8b5e3c;'>"
                 "<li>Une cartographie interactive des indicateurs (parts de résidences principales, logements vacants, etc.);</li>"
                 "<li>Une analyse temporelle de l’évolution du parc par commune ;</li>"
                 "<li>Des graphiques interactifs permettant d’explorer la composition du parc de logements ;</li></ul>"
@@ -153,17 +190,17 @@ with tab1:
     # Source des données et traitement
     st.markdown("""
     <div class='info-card'>
-        <h3 style='color: #667eea; margin-top: 0;'>Source et traitement des données</h3>
-        <p style='line-height: 1.8; color: #495057;'>Les données proviennent des fichiers <strong>Insee</strong>,<strong> recensements de la population</strong> <strong>disponibles en Open Data.</strong></p>\nElles ont été retraitées pour :
-        <ul style='line-height: 1.8; color: #495057;'>
+        <h3 style='color: #d17842; margin-top: 0;'>Source et traitement des données</h3>
+        <p style='line-height: 1.8; color: #8b5e3c;'>Les données proviennent des fichiers <strong>Insee</strong>,<strong> recensements de la population</strong> <strong>disponibles en Open Data.</strong></p>\nElles ont été retraitées pour :
+        <ul style='line-height: 1.8; color: #8b5e3c;'>
             <li>Harmoniser les millésimes de 2013 à 2022 ;</li>
             <li>Calculer des indicateurs complémentaires (parts, taux, ratios...) ;</li>
             <li>Produire des jeux de données exploitables pour la visualisation.</li>
         </ul>
-        <p style='line-height: 1.8; color: #495057;'>Les traitements ont été réalisés avec <strong>Python (pandas, geopandas)</strong> et les visualisations avec <strong>Streamlit</strong>, <strong>Plotly</strong> et <strong>Folium</strong>.</p>
+        <p style='line-height: 1.8; color: #8b5e3c;'>Les traitements ont été réalisés avec <strong>Python (pandas, geopandas)</strong> et les visualisations avec <strong>Streamlit</strong>, <strong>Plotly</strong> et <strong>Folium</strong>.</p>
     </div>""", unsafe_allow_html=True)
 
-    st.markdown("<div class='info-card'><h3 style='color: #667eea;'>Exemple de données utilisées</h3></div>", unsafe_allow_html=True)
+    st.markdown("<div class='info-card'><h3 style='color: #d17842;'>Exemple de données utilisées</h3></div>", unsafe_allow_html=True)
 
 
     # Affichage d’un petit échantillon
@@ -173,12 +210,12 @@ with tab1:
     )
 
     # Légende explicative
-    st.markdown("<div class='info-card'><h3 style='color: #667eea;'>Description des variables</h3></div>", unsafe_allow_html=True)
+    st.markdown("<div class='info-card'><h3 style='color: #d17842;'>Description des variables</h3></div>", unsafe_allow_html=True)
     st.markdown("""
-    <div style='background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 3px solid #667eea; margin-top: 15px;'>
-        <p style='color: #495057; margin-bottom: 10px;'><em>Chaque ligne correspond à une commune et contient les indicateurs calculés pour l’année la plus récente (2022).</em></p>
-        <p style='color: #495057; font-weight: 600; margin-bottom: 8px;'>Les principales variables sont :</p>
-        <ul style='color: #495057; line-height: 1.8;'>
+    <div style='background: #faf6ef; padding: 20px; border-radius: 8px; border-left: 3px solid #d17842; margin-top: 15px;'>
+        <p style='color: #8b5e3c; margin-bottom: 10px;'><em>Chaque ligne correspond à une commune et contient les indicateurs calculés pour l'année la plus récente (2022).</em></p>
+        <p style='color: #8b5e3c; font-weight: 600; margin-bottom: 8px;'>Les principales variables sont :</p>
+        <ul style='color: #8b5e3c; line-height: 1.8;'>
             <li><strong>LIBGEO</strong> : Nom de la commune;</li>
             <li><strong>DEP</strong> : Code du département (30 ou 34);</li>
             <li><strong>LOG, RP, RSECOCC, LOGVAC</strong> : Volumes de logements;</li>
@@ -190,9 +227,9 @@ with tab1:
 
     # Signature / contact
     st.markdown("""
-  <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  <div style='background: linear-gradient(135deg, #e8a87c 0%, #d17842 100%);
               padding: 30px; border-radius: 12px; margin-top: 40px;
-              box-shadow: 0 4px 15px rgba(102,126,234,0.3);'>
+              box-shadow: 0 4px 15px rgba(209, 120, 66, 0.3);'>
     <p style='text-align:center; color: white; font-size: 16px; margin: 0; line-height: 1.8;'>
       Développé dans le cadre du projet <strong>Open Data</strong> — Données INSEE, 2013–2022<br>
       Réalisation : <strong>Amadou Aboubacar, Ndiaye Ibrahima</strong><br>
@@ -208,74 +245,11 @@ with tab1:
 #  ONGLET 2 : CARTOGRAPHIE
 # ------------------------------------------------
 with tab2:
-    #st.header("Cartographie interactive")
-    st.markdown("<h2 style='text-align:center; color:#2E4053;'>Cartographie interactive</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#7F8C8D; margin-bottom: 20px;'>Explorez les indicateurs de logement par commune</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Cartographie interactive</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#8b5e3c; margin-bottom: 20px;'>Explorez les indicateurs de logement par commune</p>", unsafe_allow_html=True)
 
-    # -----------------------------
     # Layout : deux colonnes
-    # -----------------------------
     col_left, col_right = st.columns([1, 3], gap="small")
-    st.markdown("""
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-  * { font-family: 'Inter', sans-serif; }
-
-  .main { background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%); }
-
-  .header-container {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 40px 20px;
-      border-radius: 15px;
-      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
-      margin-bottom: 30px;
-  }
-
-  .main-title { text-align: center; color: #fff; font-size: 42px; font-weight: 700; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
-  .subtitle { text-align: center; color: #f0f0f0; font-size: 18px; margin-bottom: 10px; }
-
-  h2, h3, h4 { color: #2E4053; font-weight: 600; }
-
-  .info-card {
-      background: white;
-      padding: 25px;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-      margin: 15px 0;
-      border-left: 4px solid #667eea;
-      transition: all 0.3s ease;
-  }
-  .info-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12); transform: translateY(-2px); }
-
-  div[data-baseweb="tab-list"] {
-      justify-content: center;
-      gap: 15px !important;
-      background: white;
-      padding: 15px 20px;
-      border-radius: 15px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-      margin-bottom: 20px;
-  }
-  button[data-baseweb="tab"] {
-      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-      color: #495057; border-radius: 10px; padding: 12px 35px; font-size: 16px; font-weight: 600; border: none;
-      transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  }
-  button[data-baseweb="tab"]:hover { background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%); transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-  button[data-baseweb="tab"][aria-selected="true"] {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); transform: translateY(-3px);
-  }
-
-  hr { border: none; height: 2px; background: linear-gradient(90deg, transparent, #ddd, transparent); margin: 25px 0; }
-
-  .sidebar-title {
-      color: #2E4053; font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #667eea;
-  }
-
-  .dataframe { border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-</style>
-    """, unsafe_allow_html=True)
     with col_left:
         
         # --- Initialisation de session pour un seul choix global ---
@@ -358,6 +332,19 @@ with tab2:
         elif st.session_state.selected_group == "loc" and choice_loc:
             variable = {v: k for k, v in labels_rpty.items()}[choice_loc]
 
+        # Affichage des statistiques de la variable sélectionnée
+        if variable:
+            stats = gdf[variable].describe()
+            st.markdown(f"""
+            <div class='info-card'>
+                <p style='margin: 0; color: #8b5e3c; font-size: 13px;'>
+                    <b>Statistiques :</b><br>
+                    Min: {stats['min']:.1f}% | 
+                    Moy: {stats['mean']:.1f}%<br>
+                    Max: {stats['max']:.1f}%
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col_right:
         # -----------------------------
@@ -399,7 +386,7 @@ with tab2:
             name="Communes",
             style_function=lambda x: {
                 "fillColor": "transparent",
-                "color": "#1f77b4",
+                "color": "#d17842",
                 "weight": 0.5,
             },
             tooltip=folium.GeoJsonTooltip(
@@ -409,8 +396,8 @@ with tab2:
                 sticky=True,
                 labels=True,
                 style=(
-                    "background-color: white; color: #333;font-family: Arial; font-size: 13px; " 
-                    "padding: 6px; border: 1px solid #bbb; border-radius:5px;"
+                    "background-color: #faf6ef; color: #8b5e3c; font-family: Inter; font-size: 13px; " 
+                    "padding: 8px; border: 2px solid #d17842; border-radius:6px;"
                 ),
             ),
         ).add_to(m)
@@ -431,7 +418,7 @@ with tab3:
     # =====================================================
     #  ANALYSE PAR COMMUNE — DESIGN ÉPURÉ ET HARMONISÉ
     # =====================================================
-    st.markdown("<h2 style='text-align:center; color:#2E4053;'>Analyse par commune</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Analyse par commune</h2>", unsafe_allow_html=True)
 
     commune = st.selectbox(
         "Sélectionnez une commune :",
@@ -450,11 +437,11 @@ with tab3:
         departement = "Gard"
     else:
         departement = "Autre département"
-    st.markdown(f"<h4 style='text-align:center; color:#7F8C8D;'>Évolution historique de la commune : <b>{commune}</b><br>Département : {departement}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align:center; color:#8b5e3c;'>Évolution historique de la commune : <b>{commune}</b><br>Département : {departement}</h4>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Palette de couleurs cohérente
-    couleurs = ["#4C72B0", "#C44E52", "#85B31A", "#FFA726"]
+    # Palette de couleurs beige-orange harmonisée
+    couleurs = ["#d17842", "#e8a87c", "#8b5e3c", "#f0b68c", "#c06838"]
 
     # =====================================================
     # 1️⃣ Évolution du parc de logements
@@ -490,7 +477,7 @@ with tab3:
                 text=[f"{int(v):,}".replace(",", " ") for v in totaux["LOG"]],
                 textposition="top center",
                 name="Total logements",
-                line=dict(color="#2E4053", width=2.5),
+                line=dict(color="#8b5e3c", width=2.5),
                 marker=dict(size=6)
             )
         )
@@ -574,7 +561,7 @@ with tab3:
             orientation="h",
             text_auto=True,
             title="<b>Répartition des résidences principales en 2022 selon leur typologie</b>",
-            color_discrete_sequence=["#2E86C1"]
+            color_discrete_sequence=["#d17842"]
         )
         fig4.update_layout(
             template="plotly_white",
