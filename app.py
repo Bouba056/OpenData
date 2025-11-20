@@ -6,7 +6,12 @@ import streamlit as st
 import pandas as pd
 import geopandas as gpd
 import folium
-from streamlit_folium import st_folium
+import json as json
+import pydeck as pdk
+import numpy as np
+import branca.colormap as cm
+import plotly.io as pio
+import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
@@ -19,6 +24,8 @@ import ml_models as ml  # Module ML
 def load_geojson(path):
     gdf = gpd.read_file(path)
     return gdf.set_crs(epsg=2154, allow_override=True).to_crs(epsg=4326)
+
+
 
 @st.cache_data
 def load_csv(path):
@@ -210,6 +217,7 @@ with tab1:
 #  ONGLET 2 : CARTOGRAPHIE
 # ------------------------------------------------
 
+
 with tab2:
     # --- Préparation des données par département ---
     # Filtres département robustes (compatibles int/str)
@@ -282,11 +290,47 @@ with tab2:
 
     st.markdown("---")
 
-    st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Cartographie interactive</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#8b5e3c; margin-bottom: 20px;'>Explorez les indicateurs de logement par commune</p>", unsafe_allow_html=True)
+# Layout : deux colonnes
+
+    col_left, col_right = st.columns([3, 1], gap="small")
+    with col_left:
+
+        st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Cartographie interactive</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:left; color:#8b5e3c; margin-bottom: 20px;'>Sélectionnez et explorez les indicateurs de logement par commune</p>", unsafe_allow_html=True)
+
+    with col_right:
+        # --- NOUVEAU : Recherche de commune pour Zoom ---
+        st.markdown("### Zoom sur une commune")
+        
+        # Correction : On enlève les valeurs nulles (.dropna()) avant de trier
+        communes_propres = gdf["LIBGEO"].dropna().unique().tolist()
+        
+        # On crée la liste finale
+        liste_communes = ["Aucune"] + sorted(communes_propres)
+        
+        selected_commune = st.selectbox("Sélectionnez pour mettre en évidence :", liste_communes)
 
     # Layout : deux colonnes
     col_left, col_right = st.columns([1, 3], gap="small")
+    
+
+
+
+    def reset_parc():
+        st.session_state.radio_rp = None
+        st.session_state.radio_loc = None
+        st.session_state.selected_group = "parc"
+
+    def reset_rp():
+        st.session_state.radio_parc = None
+        st.session_state.radio_loc = None
+        st.session_state.selected_group = "rp"
+
+    def reset_loc():
+        st.session_state.radio_parc = None
+        st.session_state.radio_rp = None
+        st.session_state.selected_group = "loc"
+
     with col_left:
         
         # --- Initialisation de session pour un seul choix global ---
@@ -305,11 +349,13 @@ with tab2:
         choice_parc = st.radio(
             "Variables (parc total)",
             options=list(labels_parc.values()),
-            index=None if st.session_state.selected_group != "parc" else 0,
+            index=0 if st.session_state.selected_group == "parc" else None,
             horizontal=False,
             key="radio_parc",
             label_visibility="collapsed",
+            on_change=reset_parc
         )
+
 
         if choice_parc:
             st.session_state.selected_group = "parc"
@@ -327,11 +373,13 @@ with tab2:
         choice_rp = st.radio(
             "Variables (résidences principales)",
             options=list(labels_rp.values()),
-            index=None if st.session_state.selected_group != "rp" else 0,
+            index=0 if st.session_state.selected_group == "rp" else None,
             horizontal=False,
             key="radio_rp",
             label_visibility="collapsed",
+            on_change=reset_rp
         )
+
 
         if choice_rp:
             st.session_state.selected_group = "rp"
@@ -349,11 +397,13 @@ with tab2:
         choice_loc = st.radio(
             "Variables (locatif)",
             options=list(labels_rpty.values()),
-            index=None if st.session_state.selected_group != "loc" else 0,
+            index=0 if st.session_state.selected_group == "loc" else None,
             horizontal=False,
             key="radio_loc",
             label_visibility="collapsed",
+            on_change=reset_loc
         )
+
 
         if choice_loc:
             st.session_state.selected_group = "loc"
@@ -369,84 +419,156 @@ with tab2:
         elif st.session_state.selected_group == "loc" and choice_loc:
             variable = {v: k for k, v in labels_rpty.items()}[choice_loc]
 
-        # Affichage des statistiques de la variable sélectionnée
-        if variable:
-            stats = gdf[variable].describe()
-            st.markdown(f"""
-            <div class='info-card'>
-                <p style='margin: 0; color: #8b5e3c; font-size: 13px;'>
-                    <b>Statistiques :</b><br>
-                    Min: {stats['min']:.1f}% | 
-                    Moy: {stats['mean']:.1f}%<br>
-                    Max: {stats['max']:.1f}%
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            
 
     with col_right:
         # -----------------------------
-        # Préparation des données
+        # 1. Logique de Zoom & Centre (Conservée)
         # -----------------------------
-        #gdf[variable] = pd.to_numeric(gdf[variable], errors="coerce")
-
-        # Calcul du centre géographique pour centrer la carte
+        
+        # Par défaut : Centre global
         center = gdf.geometry.union_all().centroid
         lat, lon = center.y, center.x
+        zoom_level = 8 # Pydeck a un zoom légèrement différent de Folium
+        
+        # Si une commune est sélectionnée
+        highlight_geom = None
+        if selected_commune != "Aucune":
+            subset = gdf[gdf["LIBGEO"] == selected_commune]
+            if not subset.empty:
+                # Centrage sur la commune
+                centroid = subset.geometry.centroid.iloc[0]
+                lat, lon = centroid.y, centroid.x
+                #zoom_level = 10.5 # Zoom rapproché
+                highlight_geom = subset
 
         # -----------------------------
-        # Carte Folium stylisée
+        # 2. Préparation des Couleurs (Spécifique Pydeck)
         # -----------------------------
-        m = folium.Map(
-            location=[lat, lon],
-            zoom_start=9,
-            tiles="cartodbpositron",
-            min_zoom=8,
-            max_zoom=10,
-            max_bounds=True
+        
+        min_val = gdf[variable].min()
+        max_val = gdf[variable].max()
+        
+        def get_color_scale(val):
+            # --- CORRECTION : Gestion des valeurs manquantes (NaN) ---
+            if pd.isna(val): 
+                return [200, 200, 200] # Gris clair pour les données manquantes
+            
+            # Normalisation entre 0 et 1
+            if max_val == min_val: 
+                norm = 0
+            else: 
+                norm = (val - min_val) / (max_val - min_val)
+            
+            # Sécurité : On s'assure que norm est bien entre 0 et 1
+            norm = max(0, min(1, norm))
+            
+            # Interpolation simple : Jaune pale -> Rouge Foncé
+            r = int(255 - (norm * (255 - 180)))
+            g = int(255 - (norm * 255))
+            b = int(200 - (norm * 200))
+            return [r, g, b]
+
+        # On applique la couleur
+        gdf["fill_color"] = gdf[variable].apply(get_color_scale)
+
+        # -----------------------------
+        # 3. Configuration des Couches (Layers)
+        # -----------------------------
+        
+        layers = []
+
+        # A. Couche Principale (Choropleth)
+        main_layer = pdk.Layer(
+            "GeoJsonLayer",
+            gdf,
+            pickable=True,       # Permet le survol (tooltip)
+            stroked=True,
+            filled=True,
+            extruded=False,      # Mettre à True pour la 3D
+            wireframe=True,
+            get_fill_color="fill_color", # On utilise la colonne calculée ci-dessus
+            get_line_color=[50, 50, 50],
+            get_line_width=70
+        )
+        layers.append(main_layer)
+
+        # B. Couche de Sélection (Highlight - Contour Noir)
+        if highlight_geom is not None:
+            highlight_layer = pdk.Layer(
+                "GeoJsonLayer",
+                highlight_geom,
+                stroked=True,
+                filled=False,        # Juste le contour
+                get_line_color=[0, 0, 0], # Noir
+                get_line_width=300,  # Épaisseur (en mètres, ajuster selon besoin)
+                get_line_width_min_pixels=3 # Épaisseur minimum à l'écran
+            )
+            layers.append(highlight_layer)
+
+        # -----------------------------
+        # 4. Vue et Rendu
+        # -----------------------------
+        
+        # Définition de la caméra
+        view_state = pdk.ViewState(
+            latitude=lat,
+            longitude=lon,
+            zoom=zoom_level,
+            pitch=0, # Mettre à 45 pour une vue inclinée 3D
+            bearing=0
         )
 
-        # Couche choroplèthe colorée
-        folium.Choropleth(
-            geo_data=gdf.__geo_interface__,
-            data=gdf,
-            columns=["insee_com", variable],
-            key_on="feature.properties.insee_com",
-            fill_color="YlOrRd",  # palette plus vive
-            fill_opacity=0.85,
-            line_opacity=0.4,
-            legend_name=f"{variable} (%)"
-        ).add_to(m)
+        # Tooltip (Infobulle au survol)
+        tooltip = {
+            "html": "<b>{LIBGEO} <br/>"
+                    f"{{{variable}}}%",
+            "style": {
+                "backgroundColor": "#faf6ef",
+                "color": "#8b5e3c",
+                "border": "1px solid #d17842",
+                "borderRadius": "5px"
+            }
+        }
 
-        # Contours + infobulle personnalisée
-        folium.GeoJson(
-            gdf,
-            name="Communes",
-            style_function=lambda x: {
-                "fillColor": "transparent",
-                "color": "#d17842",
-                "weight": 0.5,
-            },
-            tooltip=folium.GeoJsonTooltip(
-                fields=["LIBGEO", variable],
-                aliases=["Commune :", f"{variable} :"],
-                localize=True,
-                sticky=True,
-                labels=True,
-                style=(
-                    "background-color: #faf6ef; color: #8b5e3c; font-family: Inter; font-size: 13px; " 
-                    "padding: 8px; border: 2px solid #d17842; border-radius:6px;"
-                ),
-            ),
-        ).add_to(m)
+        # Affichage
+        r = pdk.Deck(
+            layers=layers,
+            initial_view_state=view_state,
+            map_style=None,
+            tooltip=tooltip
+        )
+        
+        
+        st.pydeck_chart(r, use_container_width=True,height=600)
+        # -----------------------------------------
+        # LÉGENDE COULEUR (Compatible Streamlit)
+        # -----------------------------------------
 
-        # Titre visuel
-        #st.markdown(
-        #    f"<h4 style='text-align:center;'>Carte de la variable <span style='color:#ff5733'>{variable}</span></h4>",
-        #    unsafe_allow_html=True,
-        #)
+        # On récupère min et max (valeurs réelles)
+        min_val = float(gdf[variable].min())
+        max_val = float(gdf[variable].max())
 
-        # Affichage de la carte
-        st_folium(m, width=None, height=660)
+        legend_html = f"""
+        <div>
+            <div style="
+                height: 18px;
+                background: linear-gradient(to right, rgb(255,255,180), rgb(255,0,0));
+                border-radius: 5px;
+                margin-bottom: 8px;
+            "></div>
+            <div style="display: flex; justify-content: space-between; color:#8b5e3c; font-size: 13px;">
+                <span>{min_val:.1f} %</span>
+                <span>{max_val:.1f} %</span>
+            </div>
+        </div>
+        """
+
+        st.markdown(legend_html, unsafe_allow_html=True)
+
+
+
+         
 
 # ------------------------------------------------
 # 📊 ONGLET 3 : ANALYSE
@@ -530,7 +652,8 @@ with tab3:
             margin=dict(t=80, b=40, l=30, r=30),
             legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"),
         )
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True,
+    config={})
 
     # =====================================================
     # 2️⃣ Répartition des résidences principales (camembert)
@@ -552,7 +675,8 @@ with tab3:
             margin=dict(t=80, b=40, l=30, r=30),
             legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"),
         )
-        st.plotly_chart(fig2, width='stretch')
+        st.plotly_chart(fig2, use_container_width=True,
+      config={})
 
     st.markdown("---")
 
@@ -583,7 +707,8 @@ with tab3:
             margin=dict(t=80, b=40, l=30, r=30),
             legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"),
         )
-        st.plotly_chart(fig3, width='stretch')
+        st.plotly_chart(fig3, use_container_width=True,
+    config={})
 
     # =====================================================
     # 4️⃣ Typologie des résidences principales
@@ -606,209 +731,176 @@ with tab3:
             margin=dict(t=80, b=40, l=30, r=30),
             yaxis=dict(categoryorder="array", categoryarray=["T1", "T2", "T3", "T4", "T5et+"]),
         )
-        st.plotly_chart(fig4, width='stretch')
+        st.plotly_chart(fig4, use_container_width=True, config={})
 
 # ------------------------------------------------
 # ONGLET 4 : INTELLIGENCE TERRITORIALE
 # ------------------------------------------------
 with tab4:
+
     st.markdown("<h2 style='text-align:center; color:#8b5e3c;'>Intelligence Territoriale</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#8b5e3c; font-size:16px;'>Analyses avancées et aide à la décision</p>", unsafe_allow_html=True)
     st.markdown("---")
-    
-    # Sous-onglets pour les 3 fonctionnalités
+
+    # 🔧 CREATION AUTOMATIQUE DES VARIABLES MANQUANTES POUR LE ML
+    if "Plog_MAISON" not in data_carto.columns:
+        data_carto["Plog_MAISON"] = (data_carto["MAISON"] / data_carto["LOG"]) * 100
+
+    if "Plog_RP" not in data_carto.columns:
+        data_carto["Plog_RP"] = (data_carto["RP"] / data_carto["LOG"]) * 100
+
+    if "Plog_RS" not in data_carto.columns:
+        data_carto["Plog_RS"] = (data_carto["RSECOCC"] / data_carto["LOG"]) * 100
+
+    if "Plog_VAC" not in data_carto.columns:
+        data_carto["Plog_VAC"] = (data_carto["LOGVAC"] / data_carto["LOG"]) * 100
+
+    if "Prp_RP_PROP" not in data_carto.columns:
+        data_carto["Prp_RP_PROP"] = (data_carto["RP_PROP"] / data_carto["RP"]) * 100
+
+    # -------------------------------------------------
+    # SOUS-ONGLETS
     ia_tab1, ia_tab2, ia_tab3 = st.tabs([
         "Profils de communes", 
         "Tension immobilière", 
         "Prédictions"
     ])
-    
+
     # =====================================================
-    # PROFILS DE COMMUNES (Clustering)
+    # 1️⃣ PROFILS DE COMMUNES (Clustering K-Means)
     # =====================================================
     with ia_tab1:
+
         st.markdown("### Regrouper les communes similaires")
         st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Regroupement automatique des communes aux profils proches (vacance, propriétaires, résidences secondaires).</p></div>", unsafe_allow_html=True)
-        
-        # Analyse automatique au chargement
-        n_profils = 3  # Fixé à 3 pour la simplicité
+
+        # → On fixe K=3
+        n_profils = 3
         data_profils, noms_profils = ml.identifier_profils_communes(data_carto, n_profils)
-        
-        # Affichage simple et direct
+
         st.markdown("#### Groupes identifiés (3)")
-        
-        # Afficher les cartes de profils en colonnes
+
         cols = st.columns(3)
         for idx, (profil_id, info) in enumerate(noms_profils.items()):
             with cols[idx]:
-                nb_communes = len(data_profils[data_profils['Profil'] == profil_id])
-                stats = ml.get_stats_profil(data_profils, profil_id)
-                
+                subset = data_profils[data_profils['Profil'] == profil_id]
+
+                # statistiques
+                pct_vac = subset["Plog_VAC"].mean()
+                pct_rs  = subset["Plog_RS"].mean()
+
                 st.markdown(f"""
                 <div class='info-card'>
                     <h4 style='color:#d17842; margin-top:0;'>{info['nom']}</h4>
                     <p style='color:#8b5e3c; font-size:14px;'>{info['description']}</p>
-                    <p style='color:#8b5e3c; margin:5px 0;'><b>{nb_communes} communes</b></p>
+                    <p style='color:#8b5e3c; margin:5px 0;'><b>{len(subset)} communes</b></p>
                     <p style='color:#8b5e3c; margin:0; font-size:12px;'>
-                    Vacance : {stats['pct_vac_moyen']:.1f}%<br>
-                    Rés. secondaires : {stats['pct_rs_moyen']:.1f}%
+                        Vacance : {pct_vac:.1f}%<br>
+                        Rés. secondaires : {pct_rs:.1f}%
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
-        
+
         st.markdown("---")
-        
-        # Recherche simple de commune
+
+        # 🔎 Trouver le profil d'une commune
         st.markdown("#### Trouver le profil d'une commune")
         commune_recherche = st.selectbox(
             "Sélectionnez une commune",
             sorted(data_profils["LIBGEO"].unique()),
             key="recherche_profil"
         )
-        
+
         if commune_recherche:
             profil_commune = data_profils[data_profils['LIBGEO'] == commune_recherche]['Profil'].iloc[0]
             nom_profil = noms_profils[profil_commune]['nom']
-            
-            # Afficher les communes similaires
-            communes_similaires = data_profils[data_profils['Profil'] == profil_commune][
-                ['LIBGEO', 'DEP']
-            ].sort_values('LIBGEO').head(10)
-            
+
+            communes_similaires = data_profils[data_profils["Profil"] == profil_commune][["LIBGEO", "DEP"]].sort_values("LIBGEO")
+
             st.info(f"**{commune_recherche}** appartient au groupe : **{nom_profil}**")
-            st.markdown(f"**Les 10 premières communes similaires :**")
-            st.dataframe(communes_similaires, width='stretch', height=300)
-    
+            st.markdown("**Communes similaires :**")
+            st.dataframe(communes_similaires.head(10), width='stretch', height=300)
+
     # =====================================================
-    # SCORE DE TENSION IMMOBILIÈRE
+    # 2️⃣ SCORE DE TENSION IMMOBILIÈRE
     # =====================================================
     with ia_tab2:
+
         st.markdown("### Où le marché du logement est-il tendu ?")
-        st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Score 0–100 calculé à partir de la vacance, des résidences secondaires et des propriétaires.</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Score 0–100 basé sur vacance, % propriétaires, résidences secondaires.</p></div>", unsafe_allow_html=True)
         st.markdown("---")
-        
-        # Calcul automatique
+
         data_tension = ml.calculer_tension_immobiliere(data_carto)
-        
-        # Affichage simple et direct - TOP 10
+
         col_top, col_flop = st.columns(2)
-        
+
         with col_top:
             st.markdown("#### Marchés les PLUS tendus")
-            st.markdown("*Là où il faut construire en priorité*")
-            top_tension = data_tension.nlargest(10, 'Score_Tension')[
-                ['LIBGEO', 'Score_Tension', 'Plog_VAC']
-            ].reset_index(drop=True)
-            top_tension.columns = ['Commune', 'Score /100', 'Vacance %']
-            st.dataframe(top_tension, width='stretch', height=400)
-        
+            top = data_tension.nlargest(10, "Score_Tension")[["LIBGEO", "Score_Tension", "Plog_VAC"]]
+            st.dataframe(top, width='stretch')
+
         with col_flop:
             st.markdown("#### Marchés les MOINS tendus")
-            st.markdown("*Là où il y a trop de logements vides*")
-            low_tension = data_tension.nsmallest(10, 'Score_Tension')[
-                ['LIBGEO', 'Score_Tension', 'Plog_VAC']
-            ].reset_index(drop=True)
-            low_tension.columns = ['Commune', 'Score /100', 'Vacance %']
-            st.dataframe(low_tension, width='stretch', height=400)
-        
+            flop = data_tension.nsmallest(10, "Score_Tension")[["LIBGEO", "Score_Tension", "Plog_VAC"]]
+            st.dataframe(flop, width='stretch')
+
         st.markdown("---")
-        
-        # Recherche par commune
+
+        # 🔎 Recherche
         st.markdown("#### Vérifier le score d'une commune")
-        commune_tension = st.selectbox(
-            "Sélectionnez une commune",
-            sorted(data_tension["LIBGEO"].unique()),
-            key="recherche_tension"
-        )
-        
+        commune_tension = st.selectbox("Choisissez une commune", sorted(data_tension["LIBGEO"].unique()))
+
         if commune_tension:
-            score = data_tension[data_tension['LIBGEO'] == commune_tension]['Score_Tension'].iloc[0]
-            niveau = data_tension[data_tension['LIBGEO'] == commune_tension]['Niveau'].iloc[0]
-            vacance = data_tension[data_tension['LIBGEO'] == commune_tension]['Plog_VAC'].iloc[0]
-            
-            col_m1, col_m2, col_m3 = st.columns(3)
-            with col_m1:
-                st.metric("Score de tension", f"{score:.1f}/100")
-            with col_m2:
-                st.metric("Niveau", niveau)
-            with col_m3:
-                st.metric("Vacance", f"{vacance:.1f}%")
-    
+            row = data_tension[data_tension["LIBGEO"] == commune_tension].iloc[0]
+            col1, col2, col3 = st.columns(3)
+            with col1: st.metric("Score", f"{row['Score_Tension']:.1f}/100")
+            with col2: st.metric("Niveau", row["Niveau"])
+            with col3: st.metric("Vacance", f"{row['Plog_VAC']:.1f}%")
+
     # =====================================================
-    # PRÉDICTION D'ÉVOLUTION
+    # 3️⃣ PRÉDICTION : Evolution du nombre de logements
     # =====================================================
     with ia_tab3:
+
         st.markdown("### Prédiction du parc de logements")
         st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Projection simple basée sur la tendance historique.</p></div>", unsafe_allow_html=True)
-        
-        # Sélection commune
-        col_commune, col_annees = st.columns([3, 1])
-        with col_commune:
-            commune_pred = st.selectbox(
-                "Sélectionnez une commune",
-                sorted(datahab["LIBGEO"].unique()),
-                key="pred_commune"
-            )
-        with col_annees:
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            commune_pred = st.selectbox("Sélectionnez une commune", sorted(datahab["LIBGEO"].unique()))
+        with col2:
             annees_pred = st.slider("Années à prédire", 1, 5, 3)
-        
+
         if st.button("Lancer la prédiction", type="primary"):
-            with st.spinner(f"Prédiction pour {commune_pred}..."):
-                predictions, croissance = ml.predire_evolution_logements(
-                    datahab, commune_pred, annees_pred
-                )
-                
-                if predictions is not None:
-                    st.success("Prédiction réalisée avec succès")
-                    
-                    # Métrique de croissance
-                    col_m1, col_m2, col_m3 = st.columns(3)
-                    with col_m1:
-                        dernier_reel = predictions[predictions['Type'] == 'Historique']['Logements'].iloc[-1]
-                        st.metric("Logements en 2022", f"{int(dernier_reel):,}".replace(',', ' '))
-                    with col_m2:
-                        dernier_pred = predictions[predictions['Type'] == 'Prédiction']['Logements'].iloc[-1]
-                        annee_fin = int(predictions[predictions['Type'] == 'Prédiction']['Année'].iloc[-1])
-                        st.metric(f"Prévision {annee_fin}", f"{int(dernier_pred):,}".replace(',', ' '))
-                    with col_m3:
-                        delta_logements = int(dernier_pred - dernier_reel)
-                        st.metric("Évolution prévue", f"{delta_logements:+,}".replace(',', ' ') + " log.",
-                                 delta=f"{croissance:.2f}%/an")
-                    
-                    # Graphique de prédiction
-                    st.markdown("#### Courbe de prédiction")
-                    fig_pred = px.line(
-                        predictions,
-                        x='Année',
-                        y='Logements',
-                        color='Type',
-                        markers=True,
-                        title=f"Évolution du parc de logements - {commune_pred}",
-                        color_discrete_map={'Historique': '#8b5e3c', 'Prédiction': '#d17842'}
-                    )
-                    fig_pred.update_layout(
-                        template="plotly_white",
-                        hovermode="x unified",
-                        xaxis_title="Année",
-                        yaxis_title="Nombre de logements"
-                    )
-                    st.plotly_chart(fig_pred, width='stretch')
-                    
-                    # Tableau de détail
-                    st.markdown("#### Détail des valeurs")
-                    st.dataframe(
-                        predictions.style.format({'Logements': '{:.0f}', 'Année': '{:.0f}'}),
-                        width='stretch',
-                        height=300
-                    )
-                else:
-                    st.error("Données historiques insuffisantes pour cette commune.")
-    
-    # Footer de l'onglet IA
+
+            predictions, croissance = ml.predire_evolution_logements(datahab, commune_pred, annees_pred)
+
+            if predictions is not None:
+                st.success("Prédiction réalisée")
+
+                dernier_reel = predictions[predictions["Type"] == "Historique"]["Logements"].iloc[-1]
+                dernier_pred = predictions[predictions["Type"] == "Prédiction"]["Logements"].iloc[-1]
+                annee_fin = predictions[predictions["Type"] == "Prédiction"]["Année"].iloc[-1]
+
+                col1, col2, col3 = st.columns(3)
+                with col1: st.metric("Logements en 2022", f"{int(dernier_reel):,}".replace(",", " "))
+                with col2: st.metric(f"Prévision {annee_fin}", f"{int(dernier_pred):,}".replace(",", " "))
+                with col3: st.metric("Évolution", f"{int(dernier_pred - dernier_reel):+}", delta=f"{croissance:.2f}%/an")
+
+                fig = px.line(predictions, x="Année", y="Logements", color="Type", markers=True)
+                fig.update_layout(template="plotly_white")
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.dataframe(predictions, width='stretch')
+
+            else:
+                st.error("Pas assez de données pour prédire.")
+
+    # ----------------------------------------------------
+    # FOOTER
     st.markdown("---")
     st.markdown("""
-    <div style='text-align:center; color:#8b5e3c; font-size:13px; padding:20px;'>
-        <p><b>Note :</b> Ces analyses utilisent des algorithmes de machine learning.<br>
-        Les prédictions sont basées sur les tendances historiques et doivent être interprétées avec précaution.</p>
+    <div style='text-align:center; color:#8b5e3c; font-size:13px;'>
+        Les modèles utilisent des tendances historiques et doivent être interprétés avec prudence.
     </div>
     """, unsafe_allow_html=True)

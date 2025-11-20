@@ -1,186 +1,243 @@
 # ================================================================
-# 🤖 Module ML simplifié - Analyse intelligente du logement
+# 🤖 MODULE ML — Version robuste et professionnelle (2025)
 # ================================================================
-# Seulement les fonctionnalités les plus pertinentes et simples
+# Ce module regroupe :
+# 1. Clustering automatique optimisé (Silhouette + KMeans)
+# 2. Score de tension immobilière basé sur PCA + pondération
+# 3. Prédiction du nombre de logements (linéaire / exponentielle)
+# ================================================================
 
 import pandas as pd
 import numpy as np
-from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
+from sklearn.linear_model import LinearRegression
+from scipy.optimize import curve_fit
 import streamlit as st
 
-# ------------------------------------------------
-# 1. PROFILS DE COMMUNES (Clustering simple)
-# ------------------------------------------------
+
+# =================================================================
+# 🔵 1) CLUSTERING — Profils de communes
+# =================================================================
+
 @st.cache_data
-def identifier_profils_communes(data, n_profils=4):
+def identifier_profils_communes(data, k_max=5):
     """
-    Regroupe les communes en profils similaires
-    Retourne : données avec profils + descriptions
+    Clustering automatique basé sur KMeans + Silhouette.
     """
-    # Calculer le % de maisons si pas déjà présent
-    data_work = data.copy()
-    if 'Plog_MAISON' not in data_work.columns:
-        data_work['Plog_MAISON'] = (data_work['MAISON'] / data_work['LOG']) * 100
     
-    # Variables clés simples à comprendre
-    features = [
-        'Plog_RP',      # % résidences principales
-        'Plog_RS',      # % résidences secondaires  
-        'Plog_VAC',     # % logements vacants
-        'Prp_RP_PROP',  # % propriétaires
-        'Plog_MAISON'   # % maisons
+    df = data.copy().fillna(0)
+
+    # ======= AJOUT ESSENTIEL POUR TON CAS =======
+    # Création du % de maisons si absent
+    if "Plog_MAISON" not in df.columns:
+        df["Plog_MAISON"] = (df["MAISON"] / df["LOG"]) * 100
+    # =============================================
+
+    variables = [
+        "Plog_RP",
+        "Plog_RS",
+        "Plog_VAC",
+        "Prp_RP_PROP",
+        "Plog_MAISON"
     ]
-    
-    # Préparation des données
-    X = data_work[features].fillna(0)
-    
-    # Normalisation (pour comparer des pommes avec des pommes)
+
+    df = data.copy().fillna(0)
+    df["Plog_MAISON"] = (df["MAISON"] / df["LOG"]) * 100
+
+    X = df[variables]
+
+    # Normalisation
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    
-    # Clustering K-Means (optimisé pour la rapidité)
-    kmeans = KMeans(n_clusters=n_profils, random_state=42, n_init=3, max_iter=100)
-    profils = kmeans.fit_predict(X_scaled)
-    
-    # Ajout des profils
-    data_profils = data_work.copy()
-    data_profils['Profil'] = profils
-    
-    # Donner des noms compréhensibles aux profils
-    noms_profils = {}
-    for profil_id in range(n_profils):
-        stats = data_profils[data_profils['Profil'] == profil_id][features].mean()
-        
-        # Logique simple de nommage
-        if stats['Plog_RS'] > 25:
-            nom = "Profil touristique"
-            desc = f"Forte présence de résidences secondaires ({stats['Plog_RS']:.1f}%)"
-        elif stats['Plog_VAC'] > 12:
-            nom = "Profil sous-tension"
-            desc = f"Taux de vacance important ({stats['Plog_VAC']:.1f}%)"
-        elif stats['Prp_RP_PROP'] > 70 and stats['Plog_MAISON'] > 75:
-            nom = "Profil résidentiel pavillonnaire"
-            desc = f"Propriétaires en maison ({stats['Prp_RP_PROP']:.1f}% proprio)"
-        else:
-            nom = f"Profil mixte équilibré"
-            desc = "Profil diversifié"
-        
-        noms_profils[profil_id] = {'nom': nom, 'description': desc}
-    
-    # Ajouter les noms lisibles
-    data_profils['Nom_Profil'] = data_profils['Profil'].map(lambda x: noms_profils[x]['nom'])
-    
-    return data_profils, noms_profils
 
-# ------------------------------------------------
-# 2. SCORE DE TENSION IMMOBILIÈRE (0-100)
-# ------------------------------------------------
+    # Sélection automatique du meilleur nombre de clusters (2 → k_max)
+    best_k = 2
+    best_sil = -1
+
+    for k in range(2, k_max + 1):
+        model = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels = model.fit_predict(X_scaled)
+        sil = silhouette_score(X_scaled, labels)
+        if sil > best_sil:
+            best_sil = sil
+            best_k = k
+
+    # Clustering final
+    final = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+    profils = final.fit_predict(X_scaled)
+
+    df["Profil"] = profils
+
+    # Génération automatique des descriptions
+    descriptions = {}
+    for p in range(best_k):
+        sous_df = df[df["Profil"] == p][variables].mean()
+        
+
+        desc = []
+        if sous_df["Plog_RS"] > 20:
+            desc.append("forte présence de résidences secondaires")
+        if sous_df["Plog_VAC"] > 12:
+            desc.append("vacance importante")
+        if sous_df["Prp_RP_PROP"] > 65:
+            desc.append("majorité de propriétaires")
+        if sous_df["Plog_MAISON"] > 70:
+            desc.append("parc majoritairement pavillonnaire")
+
+        texte = ", ".join(desc) if desc else "profil équilibré"
+        descriptions[p] = {
+            "nom": f"Profil {p+1}",
+            "description": texte
+        }
+
+    df["Nom_Profil"] = df["Profil"].map(lambda x: descriptions[x]["nom"])
+
+    return df, descriptions
+
+
+# =================================================================
+# 🔵 2) SCORE DE TENSION IMMOBILIÈRE (Méthode PCA pondérée)
+# =================================================================
+
 @st.cache_data
 def calculer_tension_immobiliere(data):
     """
-    Calcule un score simple de 0 à 100
-    100 = marché très tendu (peu de vacance, forte demande)
-    0 = marché détendu (beaucoup de vacance)
+    Score de tension robuste basé sur :
+    - Standardisation
+    - PCA pour pondérer objectivement les variables
+    - Score normalisé entre 0 et 100
+
+    Variables utilisées :
+        - Vacance (%)
+        - Résidences secondaires (%)
+        - Propriétaires (%)
+
+    Retourne DF avec Score_Tension et Niveau.
     """
-    data_tension = data.copy()
-    
-    # 3 indicateurs simples
-    # 1. Vacance (moins de vacance = plus de tension)
-    tension_vacance = 100 - data_tension['Plog_VAC'] * 5  # On inverse
-    tension_vacance = tension_vacance.clip(0, 100)
-    
-    # 2. Résidences secondaires (si élevé, retire du marché = tension)
-    tension_rs = data_tension['Plog_RS'] * 2
-    tension_rs = tension_rs.clip(0, 100)
-    
-    # 3. Propriétaires (marché stable mais peu liquide)
-    tension_proprio = data_tension['Prp_RP_PROP'] * 0.5
-    tension_proprio = tension_proprio.clip(0, 100)
-    
-    # Score final (moyenne pondérée)
-    data_tension['Score_Tension'] = (
-        tension_vacance * 0.5 +      # 50% du poids sur la vacance
-        tension_rs * 0.3 +            # 30% sur les rés. secondaires
-        tension_proprio * 0.2         # 20% sur les propriétaires
-    )
-    
-    # Arrondir pour simplifier
-    data_tension['Score_Tension'] = data_tension['Score_Tension'].round(1)
-    
-    # Catégories simples
-    data_tension['Niveau'] = pd.cut(
-        data_tension['Score_Tension'],
-        bins=[0, 30, 60, 80, 100],
-        labels=['🟢 Faible', '🟡 Modérée', '🟠 Élevée', '🔴 Très élevée'],
+
+    df = data.copy().fillna(0)
+    variables = ["Plog_VAC", "Plog_RS", "Prp_RP_PROP"]
+
+    X = df[variables]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # PCA pour pondération objective
+    pca = PCA(n_components=1)
+    composante = pca.fit_transform(X_scaled).flatten()
+
+    # Normalisation en score 0-100
+    score = (composante - composante.min()) / (composante.max() - composante.min())
+    score = score * 100
+
+    df["Score_Tension"] = score.round(1)
+
+    df["Niveau"] = pd.cut(
+        df["Score_Tension"],
+        bins=[0, 25, 50, 75, 100],
+        labels=["🟢 Faible", "🟡 Modérée", "🟠 Élevée", "🔴 Très élevée"],
         include_lowest=True
     )
-    
-    return data_tension
 
-# ------------------------------------------------
-# 3. PRÉDICTION SIMPLE (Tendance linéaire)
-# ------------------------------------------------
+    return df
+
+
+# =================================================================
+# 🔵 3) PRÉDICTION DU PARC — Linéaire ou exponentielle
+# =================================================================
+
+def _exp_model(x, a, b):
+    """Modèle exponentiel simple : y = a * exp(bx)"""
+    return a * np.exp(b * x)
+
+
 @st.cache_data
-def predire_evolution_logements(historical_data, commune, annees_futures=3):
+def predire_evolution_logements(data, commune, annees_futures=3):
     """
-    Prédit l'évolution du nombre de logements
-    Méthode : régression linéaire simple (tendance)
-    """
-    # Filtrer sur la commune
-    commune_data = historical_data[historical_data['LIBGEO'] == commune].copy()
-    
-    if len(commune_data) < 3:
-        return None, "Pas assez de données historiques"
-    
-    # Trier par année
-    commune_data = commune_data.sort_values('AN')
-    
-    # Régression linéaire simple
-    X = commune_data['AN'].values
-    y = commune_data['LOG'].values
-    
-    # Calculer la pente (croissance annuelle moyenne)
-    n = len(X)
-    mean_x = X.mean()
-    mean_y = y.mean()
-    
-    # Formule de la pente
-    pente = ((X - mean_x) * (y - mean_y)).sum() / ((X - mean_x) ** 2).sum()
-    intercept = mean_y - pente * mean_x
-    
-    # Prédictions futures
-    annees_pred = np.arange(X.max() + 1, X.max() + annees_futures + 1)
-    logements_pred = pente * annees_pred + intercept
-    
-    # Créer dataframe résultat
-    predictions = pd.DataFrame({
-        'Année': np.concatenate([X, annees_pred]),
-        'Logements': np.concatenate([y, logements_pred]),
-        'Type': ['Historique'] * len(X) + ['Prédiction'] * len(annees_pred)
-    })
-    
-    # Calculer la croissance annuelle moyenne en %
-    croissance_annuelle = (pente / mean_y) * 100
-    
-    return predictions, croissance_annuelle
+    Prédit le nombre de logements d'une commune via :
+    - Régression linéaire
+    - Régression exponentielle
+    Sélection automatique du meilleur modèle selon le RMSE.
 
-# ------------------------------------------------
-# 4. FONCTION HELPER : Statistiques du profil
-# ------------------------------------------------
-def get_stats_profil(data, profil_id):
+    Retour :
+      predictions (DataFrame)
+      croissance annuelle (%)
     """
-    Retourne les stats moyennes d'un profil
+
+    df = data[data["LIBGEO"] == commune].sort_values("AN")
+    if len(df) < 3:
+        return None, None
+
+    X = df["AN"].values
+    y = df["LOG"].values
+    X_reshape = X.reshape(-1, 1)
+
+    # -------------------------
+    # 🔹 Modèle LINÉAIRE
+    # -------------------------
+    lin = LinearRegression()
+    lin.fit(X_reshape, y)
+    y_pred_lin = lin.predict(X_reshape)
+    rmse_lin = np.sqrt(((y - y_pred_lin) ** 2).mean())
+
+    # -------------------------
+    # 🔹 Modèle EXPONENTIEL
+    # -------------------------
+    try:
+        params, _ = curve_fit(_exp_model, X, y, maxfev=10000)
+        y_pred_exp = _exp_model(X, params[0], params[1])
+        rmse_exp = np.sqrt(((y - y_pred_exp) ** 2).mean())
+    except:
+        rmse_exp = np.inf
+
+    # -------------------------
+    # 🔹 CHOIX AUTOMATIQUE
+    # -------------------------
+    if rmse_lin <= rmse_exp:
+        model_used = "linéaire"
+        future_years = np.arange(X.max() + 1, X.max() + annees_futures + 1)
+        future_pred = lin.predict(future_years.reshape(-1, 1))
+    else:
+        model_used = "exponentiel"
+        future_years = np.arange(X.max() + 1, X.max() + annees_futures + 1)
+        future_pred = _exp_model(future_years, params[0], params[1])
+
+    # -------------------------
+    # 🔹 DATAFRAME FINAL
+    # -------------------------
+    df_hist = pd.DataFrame({
+        "Année": X,
+        "Logements": y,
+        "Type": "Historique"
+    })
+
+    df_pred = pd.DataFrame({
+        "Année": future_years,
+        "Logements": future_pred,
+        "Type": "Prédiction"
+    })
+
+    full = pd.concat([df_hist, df_pred], ignore_index=True)
+    croissance = ((future_pred[-1] - y[-1]) / y[-1]) * 100 / annees_futures
+
+    return full, croissance
+
+
+
+def get_stats_profil(df, profil_id):
     """
-    profil_data = data[data['Profil'] == profil_id]
-    
-    stats = {
-        'nb_communes': len(profil_data),
-        'pct_rs_moyen': profil_data['Plog_RS'].mean(),
-        'pct_vac_moyen': profil_data['Plog_VAC'].mean(),
-        'pct_proprio_moyen': profil_data['Prp_RP_PROP'].mean(),
-        'pct_maison_moyen': profil_data['Plog_MAISON'].mean()
+    Retourne les statistiques simples d'un profil :
+    - nombre de communes
+    - moyenne LOG, RP, VAC, etc.
+    """
+    subset = df[df["Profil"] == profil_id]
+
+    return {
+        "count": len(subset),
+        "log_mean": subset["LOG"].mean(),
+        "rp_mean": subset["RP"].mean(),
+        "vac_mean": subset["LOGVAC"].mean()
     }
-    
-    return stats
