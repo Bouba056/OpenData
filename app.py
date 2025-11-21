@@ -548,18 +548,42 @@ with tab2:
         # On récupère min et max (valeurs réelles)
         min_val = float(gdf[variable].min())
         max_val = float(gdf[variable].max())
+        mean_val = float(gdf[variable].mean())
+
+        if max_val == min_val:
+            mean_ratio = 0.5
+        else:
+            mean_ratio = (mean_val - min_val) / (max_val - min_val)
+            mean_ratio = max(0, min(1, mean_ratio))
+
+        mean_pct = mean_ratio * 100
 
         legend_html = f"""
         <div>
-            <div style="
-                height: 18px;
-                background: linear-gradient(to right, rgb(255,255,180), rgb(255,0,0));
-                border-radius: 5px;
-                margin-bottom: 8px;
-            "></div>
-            <div style="display: flex; justify-content: space-between; color:#8b5e3c; font-size: 13px;">
-                <span>{min_val:.1f} %</span>
-                <span>{max_val:.1f} %</span>
+            <div style="position:relative; height: 18px; margin-bottom: 12px;">
+                <div style="
+                    height: 18px;
+                    background: linear-gradient(to right, rgb(255,255,180), rgb(255,0,0));
+                    border-radius: 5px;
+                "></div>
+                <div style="
+                    position:absolute;
+                    left: calc({mean_pct:.1f}% - 1px);
+                    top: -4px;
+                    width: 2px;
+                    height: 26px;
+                    background: #8b5e3c;
+                    box-shadow: 0 0 6px rgba(0,0,0,0.15);
+                "></div>
+            </div>
+            <div style="position:relative; color:#8b5e3c; font-size: 13px; height: 18px;">
+                <span style="position:absolute; left:0;">{min_val:.1f} %</span>
+                <span style="position:absolute; right:0;">{max_val:.1f} %</span>
+                <span style="
+                    position:absolute;
+                    left: calc({mean_pct:.1f}%);
+                    transform: translateX(-50%);
+                ">moyenne : {mean_val:.1f}%</span>
             </div>
         </div>
         """
@@ -746,6 +770,9 @@ with tab4:
     if "Plog_MAISON" not in data_carto.columns:
         data_carto["Plog_MAISON"] = (data_carto["MAISON"] / data_carto["LOG"]) * 100
 
+    if "Plog_APPART" not in data_carto.columns:
+        data_carto["Plog_APPART"] = (data_carto["APPART"] / data_carto["LOG"]) * 100
+
     if "Plog_RP" not in data_carto.columns:
         data_carto["Plog_RP"] = (data_carto["RP"] / data_carto["LOG"]) * 100
 
@@ -778,16 +805,16 @@ with tab4:
         n_profils = 3
         data_profils, noms_profils = ml.identifier_profils_communes(data_carto, n_profils)
 
-        st.markdown("#### Groupes identifiés (3)")
+        col_profils, col_map = st.columns([1, 2], gap="large")
 
-        cols = st.columns(3)
-        for idx, (profil_id, info) in enumerate(noms_profils.items()):
-            with cols[idx]:
+        with col_profils:
+            st.markdown("#### Groupes identifiés (3)")
+
+            for profil_id, info in noms_profils.items():
                 subset = data_profils[data_profils['Profil'] == profil_id]
 
-                # statistiques
                 pct_vac = subset["Plog_VAC"].mean()
-                pct_rs  = subset["Plog_RS"].mean()
+                pct_rs = subset["Plog_RS"].mean()
 
                 st.markdown(f"""
                 <div class='info-card'>
@@ -798,28 +825,119 @@ with tab4:
                         Vacance : {pct_vac:.1f}%<br>
                         Rés. secondaires : {pct_rs:.1f}%
                     </p>
+                    <ul style='color:#8b5e3c; font-size:12px; padding-left:18px;'>
+                        {''.join([f"<li>{point}</li>" for point in info.get('insights', [])])}
+                    </ul>
                 </div>
                 """, unsafe_allow_html=True)
 
-        st.markdown("---")
 
-        # 🔎 Trouver le profil d'une commune
-        st.markdown("#### Trouver le profil d'une commune")
-        commune_recherche = st.selectbox(
-            "Sélectionnez une commune",
-            sorted(data_profils["LIBGEO"].unique()),
-            key="recherche_profil"
-        )
 
-        if commune_recherche:
-            profil_commune = data_profils[data_profils['LIBGEO'] == commune_recherche]['Profil'].iloc[0]
-            nom_profil = noms_profils[profil_commune]['nom']
+        with col_map:
+            st.markdown("#### Cartographie des profils identifiés")
+            st.markdown("##### Trouver le profil d'une commune")
+            commune_recherche = st.selectbox(
+                "Sélectionnez une commune",
+                sorted(data_profils["LIBGEO"].unique()),
+                key="recherche_profil"
+            )
 
-            communes_similaires = data_profils[data_profils["Profil"] == profil_commune][["LIBGEO", "DEP"]].sort_values("LIBGEO")
+            if commune_recherche:
+                profil_commune = data_profils[data_profils['LIBGEO'] == commune_recherche]['Profil'].iloc[0]
+                nom_profil = noms_profils[profil_commune]['nom']
 
-            st.info(f"**{commune_recherche}** appartient au groupe : **{nom_profil}**")
-            st.markdown("**Communes similaires :**")
-            st.dataframe(communes_similaires.head(10), width='stretch', height=300)
+                communes_similaires = data_profils[data_profils["Profil"] == profil_commune][["LIBGEO", "DEP"]].sort_values("LIBGEO")
+
+                st.info(f"**{commune_recherche}** appartient au groupe : **{nom_profil}**")
+
+            gdf_profils = gdf.merge(
+                data_profils[["LIBGEO", "Profil", "Nom_Profil"]],
+                on="LIBGEO",
+                how="left",
+            )
+
+            color_palette = [
+                [209, 120, 66],
+                [139, 94, 60],
+                [247, 197, 142],
+                [120, 158, 149],
+                [183, 120, 180],
+            ]
+            profil_colors = {
+                profil_id: color_palette[idx % len(color_palette)]
+                for idx, profil_id in enumerate(sorted(noms_profils.keys()))
+            }
+
+            gdf_profils["fill_color"] = gdf_profils["Profil"].map(
+                lambda x: profil_colors.get(x, [210, 210, 210])
+            )
+
+            center_geom = gdf.geometry.union_all().centroid
+            profils_view = pdk.ViewState(
+                latitude=center_geom.y,
+                longitude=center_geom.x,
+                zoom=8,
+                pitch=0,
+            )
+
+            profils_layer = pdk.Layer(
+                "GeoJsonLayer",
+                gdf_profils,
+                pickable=True,
+                stroked=True,
+                filled=True,
+                get_fill_color="fill_color",
+                get_line_color=[80, 80, 80],
+                get_line_width=50,
+            )
+
+            profils_tooltip = {
+                "html": "<b>{LIBGEO}</b><br/>Profil : {Nom_Profil}",
+                "style": {
+                    "backgroundColor": "#faf6ef",
+                    "color": "#8b5e3c",
+                    "border": "1px solid #d17842",
+                    "borderRadius": "5px",
+                },
+            }
+
+            profils_map = pdk.Deck(
+                layers=[profils_layer],
+                initial_view_state=profils_view,
+                map_style=None,
+                tooltip=profils_tooltip,
+            )
+
+            st.pydeck_chart(profils_map, use_container_width=True, height=500)
+
+            legend_blocks = []
+            for profil_id, info in noms_profils.items():
+                color = profil_colors.get(profil_id, [210, 210, 210])
+                nom = info["nom"].strip()
+                if nom.lower().startswith("profil "):
+                    nom = nom.split(" ", 1)[1]
+                block = (
+                    f"<div style='display:flex; align-items:center; margin-bottom:6px;'>"
+                    f"<span style='width:16px; height:16px; border-radius:4px; background: rgb({color[0]}, {color[1]}, {color[2]}); display:inline-block; margin-right:8px; border:1px solid #8b5e3c;'></span>"
+                    f"<span style='color:#8b5e3c; font-size:13px;'>Profil {nom}</span>"
+                    f"</div>"
+                )
+                legend_blocks.append(block)
+
+            legend_items = "".join(legend_blocks)
+
+            st.markdown(
+                f"""
+                <div style='background:#faf6ef; padding:12px 16px; border-radius:10px; box-shadow:0 4px 12px rgba(139,94,60,0.12); margin-bottom:20px;'>
+                    <h5 style='color:#d17842; margin-top:0;'>Légende des profils</h5>
+                    {legend_items}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+
 
     # =====================================================
     # 2️⃣ SCORE DE TENSION IMMOBILIÈRE

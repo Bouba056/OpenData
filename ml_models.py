@@ -31,21 +31,19 @@ def identifier_profils_communes(data, k_max=5):
     df = data.copy().fillna(0)
 
     # ======= AJOUT ESSENTIEL POUR TON CAS =======
-    # Création du % de maisons si absent
-    if "Plog_MAISON" not in df.columns:
-        df["Plog_MAISON"] = (df["MAISON"] / df["LOG"]) * 100
     # =============================================
 
     variables = [
         "Plog_RP",
         "Plog_RS",
         "Plog_VAC",
-        "Prp_RP_PROP",
-        "Plog_MAISON"
+        "Plog_MAISON",
+        "Plog_APPART"
     ]
 
     df = data.copy().fillna(0)
     df["Plog_MAISON"] = (df["MAISON"] / df["LOG"]) * 100
+    df["Plog_APPART"] = (df["APPART"] / df["LOG"]) * 100
 
     X = df[variables]
 
@@ -71,26 +69,76 @@ def identifier_profils_communes(data, k_max=5):
 
     df["Profil"] = profils
 
-    # Génération automatique des descriptions
+    global_means = df[variables].mean()
+
+    label_for_var = {
+        "Plog_RP": "Résidences principales",
+        "Plog_RS": "Résidences secondaires",
+        "Plog_VAC": "Vacance",
+        "Plog_MAISON": "Part de maisons",
+        "Plog_APPART": "Part d'appartements",
+    }
+
+    label_for_name = {
+        "Plog_RP": ("résidences principales élevées", "résidences principales faibles"),
+        "Plog_RS": ("résidences secondaires élevées", "peu de résidences secondaires"),
+        "Plog_VAC": ("vacance marquée", "vacance limitée"),
+        "Plog_MAISON": ("dominante maisons", "faible part de maisons"),
+        "Plog_APPART": ("dominante appartements", "faible part d'appartements"),
+    }
+
     descriptions = {}
+    total_communes = len(df)
+
     for p in range(best_k):
-        sous_df = df[df["Profil"] == p][variables].mean()
-        
+        sous_df = df[df["Profil"] == p]
+        stats = sous_df[variables].mean()
 
-        desc = []
-        if sous_df["Plog_RS"] > 20:
-            desc.append("forte présence de résidences secondaires")
-        if sous_df["Plog_VAC"] > 12:
-            desc.append("vacance importante")
-        if sous_df["Prp_RP_PROP"] > 65:
-            desc.append("majorité de propriétaires")
-        if sous_df["Plog_MAISON"] > 70:
-            desc.append("parc majoritairement pavillonnaire")
+        deltas = {var: stats[var] - global_means[var] for var in variables}
+        insights = []
 
-        texte = ", ".join(desc) if desc else "profil équilibré"
+        part = (len(sous_df) / total_communes) * 100 if total_communes else 0
+        insights.append(f"{len(sous_df)} communes ({part:.1f}% de l'échantillon)")
+
+        for var, label in label_for_var.items():
+            delta = deltas[var]
+            if np.isnan(delta):
+                continue
+            if delta >= 5:
+                insights.append(f"{label} supérieures à la moyenne ({stats[var]:.1f}% ; +{delta:.1f} pts)")
+            elif delta <= -5:
+                insights.append(f"{label} inférieures à la moyenne ({stats[var]:.1f}% ; {delta:.1f} pts)")
+
+        if "DEP" in sous_df.columns:
+            deps = sous_df["DEP"].astype(str).value_counts().head(2)
+            if not deps.empty:
+                dep_txt = ", ".join([
+                    f"{dep} ({count / len(sous_df) * 100:.0f}%".rstrip("0").rstrip(".") + "%)"
+                    for dep, count in deps.items()
+                ])
+                insights.append(f"Départements dominants : {dep_txt}")
+
+        significant_deltas = sorted(deltas.items(), key=lambda kv: abs(kv[1]), reverse=True)
+        suffix = "profil équilibré"
+        for var, delta in significant_deltas:
+            if abs(delta) >= 3:
+                name_options = label_for_name.get(var)
+                if name_options:
+                    suffix = name_options[0] if delta >= 0 else name_options[1]
+                    break
+
+        if suffix == "profil équilibré":
+            profil_name = f"Profil {p+1}"
+        else:
+            profil_name = f"Profil {p+1} – {suffix}"
+
+        detail_points = [txt for txt in insights[1:] if "%" in txt]
+        description = " • ".join(detail_points[:2]) if detail_points else "Profil équilibré"
+
         descriptions[p] = {
-            "nom": f"Profil {p+1}",
-            "description": texte
+            "nom": profil_name,
+            "description": description,
+            "insights": insights[:5]
         }
 
     df["Nom_Profil"] = df["Profil"].map(lambda x: descriptions[x]["nom"])
