@@ -856,6 +856,12 @@ with tab4:
                 how="left",
             )
 
+            highlight_geom = None
+            if commune_recherche:
+                highlight_geom = gdf_profils[gdf_profils["LIBGEO"] == commune_recherche]
+                if highlight_geom.empty:
+                    highlight_geom = None
+
             color_palette = [
                 [209, 120, 66],
                 [139, 94, 60],
@@ -891,6 +897,20 @@ with tab4:
                 get_line_width=50,
             )
 
+            layers = [profils_layer]
+
+            if highlight_geom is not None:
+                highlight_layer = pdk.Layer(
+                    "GeoJsonLayer",
+                    highlight_geom,
+                    stroked=True,
+                    filled=False,
+                    get_line_color=[0, 0, 0],
+                    get_line_width=300,
+                    get_line_width_min_pixels=3,
+                )
+                layers.append(highlight_layer)
+
             profils_tooltip = {
                 "html": "<b>{LIBGEO}</b><br/>Profil : {Nom_Profil}",
                 "style": {
@@ -902,7 +922,7 @@ with tab4:
             }
 
             profils_map = pdk.Deck(
-                layers=[profils_layer],
+                layers=layers,
                 initial_view_state=profils_view,
                 map_style=None,
                 tooltip=profils_tooltip,
