@@ -429,18 +429,22 @@ with tab2:
         # Par défaut : Centre global
         center = gdf.geometry.union_all().centroid
         lat, lon = center.y, center.x
-        zoom_level = 8 # Pydeck a un zoom légèrement différent de Folium
+        zoom_level = 8 
+        marker_data = None
         
-        # Si une commune est sélectionnée
-        highlight_geom = None
+        # Si une commune est sélectionnée, on ajuste la vue et on prépare la surbrillance
         if selected_commune != "Aucune":
             subset = gdf[gdf["LIBGEO"] == selected_commune]
             if not subset.empty:
-                # Centrage sur la commune
                 centroid = subset.geometry.centroid.iloc[0]
                 lat, lon = centroid.y, centroid.x
-                #zoom_level = 10.5 # Zoom rapproché
-                highlight_geom = subset
+                zoom_level = 6 # Zoom plus rapproché
+                
+                # Données pour le marqueur central
+                marker_data = pd.DataFrame([{
+                    "coordinates": [lon, lat],
+                    "text": selected_commune
+                }])
 
         # -----------------------------
         # 2. Préparation des Couleurs (Spécifique Pydeck)
@@ -493,18 +497,33 @@ with tab2:
         )
         layers.append(main_layer)
 
-        # B. Couche de Sélection (Highlight - Contour Noir)
-        if highlight_geom is not None:
-            highlight_layer = pdk.Layer(
-                "GeoJsonLayer",
-                highlight_geom,
-                stroked=True,
-                filled=False,        # Juste le contour
-                get_line_color=[0, 0, 0], # Noir
-                get_line_width=300,  # Épaisseur (en mètres, ajuster selon besoin)
-                get_line_width_min_pixels=3 # Épaisseur minimum à l'écran
+        # B. Couche de Sélection (Contour bleu vif)
+        if selected_commune != "Aucune":
+            highlight_geom = gdf[gdf["LIBGEO"] == selected_commune]
+            if not highlight_geom.empty:
+                highlight_layer = pdk.Layer(
+                    "GeoJsonLayer",
+                    data=highlight_geom,
+                    stroked=True,
+                    filled=False,
+                    get_line_color=[57, 255, 20, 220], # Vert vif avec transparence
+                    get_line_width=25 # Épaisseur en pixels
+                    line_width_units='pixels'
+                )
+                layers.append(highlight_layer)
+
+        # C. Couche Marqueur Central
+        if marker_data is not None:
+            marker_layer = pdk.Layer(
+                'TextLayer',
+                data=marker_data,
+                get_position='coordinates',
+                get_text='text',
+                get_color=[0, 0, 0, 200],
+                get_size=16,
+                get_alignment_baseline="'bottom'",
             )
-            layers.append(highlight_layer)
+            layers.append(marker_layer)
 
         # -----------------------------
         # 4. Vue et Rendu
