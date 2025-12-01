@@ -429,7 +429,7 @@ with tab2:
         # Par défaut : Centre global
         center = gdf.geometry.union_all().centroid
         lat, lon = center.y, center.x
-        zoom_level = 8 
+        zoom_level = 8
         marker_data = None
         
         # Si une commune est sélectionnée, on ajuste la vue et on prépare la surbrillance
@@ -438,7 +438,6 @@ with tab2:
             if not subset.empty:
                 centroid = subset.geometry.centroid.iloc[0]
                 lat, lon = centroid.y, centroid.x
-                zoom_level = 6 # Zoom plus rapproché
                 
                 # Données pour le marqueur central
                 marker_data = pd.DataFrame([{
@@ -497,7 +496,7 @@ with tab2:
         )
         layers.append(main_layer)
 
-        # B. Couche de Sélection (Contour bleu vif)
+        # B. Couche de Sélection (Contour noir épais)
         if selected_commune != "Aucune":
             highlight_geom = gdf[gdf["LIBGEO"] == selected_commune]
             if not highlight_geom.empty:
@@ -506,8 +505,8 @@ with tab2:
                     data=highlight_geom,
                     stroked=True,
                     filled=False,
-                    get_line_color=[57, 255, 20, 220], # Vert vif avec transparence
-                    get_line_width=25 # Épaisseur en pixels
+                    get_line_color=[0, 0, 0, 255], # Noir opaque
+                    get_line_width=250, # Épaisseur en pixels
                     line_width_units='pixels'
                 )
                 layers.append(highlight_layer)
