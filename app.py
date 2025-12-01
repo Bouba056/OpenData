@@ -819,11 +819,10 @@ with tab4:
                 st.markdown(f"""
                 <div class='info-card'>
                     <h4 style='color:#d17842; margin-top:0;'>{info['nom']}</h4>
-                    <p style='color:#8b5e3c; font-size:14px;'>{info['description']}</p>
                     <p style='color:#8b5e3c; margin:5px 0;'><b>{len(subset)} communes</b></p>
                     <p style='color:#8b5e3c; margin:0; font-size:12px;'>
-                        Vacance : {pct_vac:.1f}%<br>
-                        Rés. secondaires : {pct_rs:.1f}%
+                        Vacance moyenne : {pct_vac:.1f}%<br>
+                        Rés. secondaires moyenne : {pct_rs:.1f}%
                     </p>
                     <ul style='color:#8b5e3c; font-size:12px; padding-left:18px;'>
                         {''.join([f"<li>{point}</li>" for point in info.get('insights', [])])}

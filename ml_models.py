@@ -83,8 +83,8 @@ def identifier_profils_communes(data, k_max=5):
         "Plog_RP": ("résidences principales élevées", "résidences principales faibles"),
         "Plog_RS": ("résidences secondaires élevées", "peu de résidences secondaires"),
         "Plog_VAC": ("vacance marquée", "vacance limitée"),
-        "Plog_MAISON": ("dominante maisons", "faible part de maisons"),
-        "Plog_APPART": ("dominante appartements", "faible part d'appartements"),
+        "Plog_MAISON": ("dominance des maisons", "faible part de maisons"),
+        "Plog_APPART": ("dominance des appartements", "faible part d'appartements"),
     }
 
     descriptions = {}
@@ -105,7 +105,7 @@ def identifier_profils_communes(data, k_max=5):
             if np.isnan(delta):
                 continue
             if delta >= 5:
-                insights.append(f"{label} supérieures à la moyenne ({stats[var]:.1f}% ; +{delta:.1f} pts)")
+                insights.append(f"{label} supérieures à la moyenne ({stats[var]:.1f}% ; {delta:.1f} pts)")
             elif delta <= -5:
                 insights.append(f"{label} inférieures à la moyenne ({stats[var]:.1f}% ; {delta:.1f} pts)")
 
@@ -116,7 +116,7 @@ def identifier_profils_communes(data, k_max=5):
                     f"{dep} ({count / len(sous_df) * 100:.0f}%".rstrip("0").rstrip(".") + "%)"
                     for dep, count in deps.items()
                 ])
-                insights.append(f"Départements dominants : {dep_txt}")
+                insights.append(f"Répartition des départements : {dep_txt}")
 
         significant_deltas = sorted(deltas.items(), key=lambda kv: abs(kv[1]), reverse=True)
         suffix = "profil équilibré"
