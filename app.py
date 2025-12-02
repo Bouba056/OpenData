@@ -805,9 +805,9 @@ with tab4:
 
     # -------------------------------------------------
     # SOUS-ONGLETS
-    ia_tab1, ia_tab2, ia_tab3 = st.tabs([
+    ia_tab1, ia_tab2 = st.tabs([
         "Profils de communes", 
-        "Tension immobilière", 
+       
         "Prédictions"
     ])
 
@@ -979,43 +979,12 @@ with tab4:
     # =====================================================
     # 2️⃣ SCORE DE TENSION IMMOBILIÈRE
     # =====================================================
-    with ia_tab2:
-
-        st.markdown("### Où le marché du logement est-il tendu ?")
-        st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Score 0–100 basé sur vacance, % propriétaires, résidences secondaires.</p></div>", unsafe_allow_html=True)
-        st.markdown("---")
-
-        data_tension = ml.calculer_tension_immobiliere(data_carto)
-
-        col_top, col_flop = st.columns(2)
-
-        with col_top:
-            st.markdown("#### Marchés les PLUS tendus")
-            top = data_tension.nlargest(10, "Score_Tension")[["LIBGEO", "Score_Tension", "Plog_VAC"]]
-            st.dataframe(top, width='stretch')
-
-        with col_flop:
-            st.markdown("#### Marchés les MOINS tendus")
-            flop = data_tension.nsmallest(10, "Score_Tension")[["LIBGEO", "Score_Tension", "Plog_VAC"]]
-            st.dataframe(flop, width='stretch')
-
-        st.markdown("---")
-
-        # 🔎 Recherche
-        st.markdown("#### Vérifier le score d'une commune")
-        commune_tension = st.selectbox("Choisissez une commune", sorted(data_tension["LIBGEO"].unique()))
-
-        if commune_tension:
-            row = data_tension[data_tension["LIBGEO"] == commune_tension].iloc[0]
-            col1, col2, col3 = st.columns(3)
-            with col1: st.metric("Score", f"{row['Score_Tension']:.1f}/100")
-            with col2: st.metric("Niveau", row["Niveau"])
-            with col3: st.metric("Vacance", f"{row['Plog_VAC']:.1f}%")
+   
 
     # =====================================================
     # 3️⃣ PRÉDICTION : Evolution du nombre de logements
     # =====================================================
-    with ia_tab3:
+    with ia_tab2:
 
         st.markdown("### Prédiction du parc de logements")
         st.markdown("<div class='info-card'><p style='color:#8b5e3c;margin:0;'>Projection simple basée sur la tendance historique.</p></div>", unsafe_allow_html=True)
